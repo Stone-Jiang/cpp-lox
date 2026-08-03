@@ -35,16 +35,16 @@ struct ParseRule
     ParseFn prefix = nullptr;
     ParseFn infix = nullptr;
     Prec prec = Prec::NONE;
-    ParseRule() {}
-    ParseRule(ParseFn pre, ParseFn in): prefix(pre), infix(in), prec(Prec::NONE) {}
-    ParseRule(ParseFn pre, ParseFn in, Prec p): prefix(pre), infix(in), prec(p) {}
+    constexpr ParseRule() noexcept {}
+    constexpr ParseRule(ParseFn pre, ParseFn in) noexcept: prefix(pre), infix(in), prec(Prec::NONE) {}
+    constexpr ParseRule(ParseFn pre, ParseFn in, Prec p) noexcept: prefix(pre), infix(in), prec(p) {}
 };
 
-using Rules = std::array<ParseRule, static_cast<int>(TokenType::TEOF) + 1>;
+using Rules = std::array<ParseRule, static_cast<size_t>(TokenType::TEOF) + 1>;
 
 struct RulesMaker
 {
-    static Rules make() noexcept;
+    static consteval Rules make() noexcept;
 };
 
 struct Local
@@ -81,7 +81,7 @@ private:
     Parser parser;
     std::unique_ptr<Scanner> scanner = nullptr; 
     Chunk* chunk = nullptr;
-    Rules rules;
+    static const Rules rules;
 
     Local locals[UINT8_COUNT];
     int localCount = 0;
@@ -95,7 +95,7 @@ private:
     ObjFunction* func = nullptr;
     FunctionType ftype;
 
-    Compiler(FunctionType type = FunctionType::SCRIPT): enclosing(current), rules(RulesMaker::make()), ftype(type)
+    Compiler(FunctionType type = FunctionType::SCRIPT): enclosing(current), ftype(type)
     {
         current = this;
         func = new ObjFunction();
@@ -147,7 +147,7 @@ private:
     void emitReturn();
     u8 makeConstant(Value value);
     void emitConstant(Value value);
-    ParseRule& getRule(TokenType type);
+    const ParseRule& getRule(TokenType type) const noexcept;
     void parsePrec(Prec prec);
     u8 parseVar(const std::string& msg);
     u8 identConstant(Token& name);
@@ -207,7 +207,7 @@ private:
     void super_(bool);
 
     u8 argumentList();
-    Token syntheticToken(const string& text);
+    Token syntheticToken(const char* text);
     void synchronize();
 
     Chunk* currentChunk()

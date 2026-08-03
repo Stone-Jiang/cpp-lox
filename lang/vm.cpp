@@ -1,12 +1,12 @@
 #include "vm.h"
 
-VM VM::vm;
+VM VM::vm{};
+Compiler Compiler::comp{};
 
 VM::VM()
 {
     frames.reserve(FRAMES_MAX);
     stack.reserve(STACK_MAX);
-
     defineNative("clock", clockNative);
 }
 
@@ -20,6 +20,8 @@ Result VM::interpret(const string& src)
     frames.clear();
     frameCount = 0;
     stack.clear();
+
+    
 
     auto* func = Compiler::comp.compile(src);
     if(func == nullptr)
@@ -799,8 +801,6 @@ void VM::sweep()
         }
     }
 }
-
-
 
 
 // -------

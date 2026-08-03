@@ -4,7 +4,8 @@
 3. NaN boxing
 4. Complex values
 5. BigInt and BigDecimal
-6. Symbolic computation
+6. _ methods
 7. Containers
-8. More native function and classes.
-9. 
+8. Templated helpers
+9. Better native function workflow
+10. 

@@ -1,8 +1,6 @@
 #include "compiler.h"
 #include "vm.h"
 
-Compiler Compiler::comp;
-
 ObjFunction* Compiler::compile(const string& src)
 {
     current = this;
@@ -205,9 +203,9 @@ void Compiler::declaration()
         synchronize();
 }
 
-ParseRule& Compiler::getRule(TokenType type)
+const ParseRule& Compiler::getRule(TokenType type) const noexcept
 {
-    return rules[static_cast<int>(type)];
+    return rules[static_cast<size_t>(type)];
 }
 
 void Compiler::binary(bool)
@@ -866,11 +864,11 @@ u8 Compiler::argumentList()
     return argCount;
 }
 
-Token Compiler::syntheticToken(const string& text)
+Token Compiler::syntheticToken(const char* text)
 {
     Token token;
-    token.start = text.c_str();
-    token.len = static_cast<int>(text.size());
+    token.start = text;
+    token.len = static_cast<int>(strlen(text));
     return token;
 }
 
@@ -902,53 +900,39 @@ void Compiler::synchronize()
 
 
 // ----
-Rules RulesMaker::make() noexcept
+consteval Rules RulesMaker::make() noexcept
 {
-    std::pair<TokenType, ParseRule> temp[] = {
-        {TokenType::LEFT_PAREN, ParseRule(&Compiler::grouping, &Compiler::call, Prec::CALL)},
-        {TokenType::RIGHT_PAREN, ParseRule()},
-        {TokenType::LEFT_BRACE, ParseRule()},
-        {TokenType::COMMA, ParseRule()},
-        {TokenType::DOT, ParseRule(nullptr, &Compiler::dot, Prec::CALL)},
-        {TokenType::MINUS, ParseRule(&Compiler::unary, &Compiler::binary, Prec::TERM)},
-        {TokenType::PLUS, ParseRule(nullptr, &Compiler::binary, Prec::TERM)},
-        {TokenType::SEMICOLON, ParseRule()},
-        {TokenType::SLASH, ParseRule(nullptr, &Compiler::binary, Prec::FACTOR)},
-        {TokenType::STAR, ParseRule(nullptr, &Compiler::binary, Prec::FACTOR)},
-        {TokenType::BANG, ParseRule(&Compiler::unary, nullptr, Prec::NONE)},
-        {TokenType::BANG_EQUAL, ParseRule(nullptr, &Compiler::binary, Prec::EQUALITY)},
-        {TokenType::EQUAL, ParseRule()},
-        {TokenType::EQUAL_EQUAL, ParseRule(nullptr, &Compiler::binary, Prec::EQUALITY)},
-        {TokenType::GREATER, ParseRule(nullptr, &Compiler::binary, Prec::COMPARISON)},
-        {TokenType::GREATER_EQUAL, ParseRule(nullptr, &Compiler::binary, Prec::COMPARISON)},
-        {TokenType::LESS, ParseRule(nullptr, &Compiler::binary, Prec::COMPARISON)},
-        {TokenType::LESS_EQUAL, ParseRule(nullptr, &Compiler::binary, Prec::COMPARISON)},
-        {TokenType::IDENTIFIER, ParseRule(&Compiler::variable, nullptr, Prec::NONE)},
-        {TokenType::STRING, ParseRule(&Compiler::stringy, nullptr, Prec::NONE)},
-        {TokenType::NUMBER, ParseRule(&Compiler::number, nullptr, Prec::NONE)},
-        {TokenType::AND, ParseRule(nullptr, &Compiler::and_, Prec::AND)},
-        {TokenType::CLASS, ParseRule()},
-        {TokenType::ELSE, ParseRule()},
-        {TokenType::FALSE, ParseRule(&Compiler::literal, nullptr, Prec::NONE)},
-        {TokenType::FOR, ParseRule()},
-        {TokenType::FUN, ParseRule()},
-        {TokenType::IF, ParseRule()},
-        {TokenType::NIL, ParseRule(&Compiler::literal, nullptr, Prec::NONE)},
-        {TokenType::OR, ParseRule(nullptr, &Compiler::or_, Prec::OR)},
-        {TokenType::PRINT, ParseRule()},
-        {TokenType::RETURN, ParseRule()},
-        {TokenType::SUPER, ParseRule(&Compiler::super_, nullptr, Prec::NONE)},
-        {TokenType::THIS, ParseRule(&Compiler::this_, nullptr, Prec::NONE)},
-        {TokenType::TRUE, ParseRule(&Compiler::literal, nullptr, Prec::NONE)},
-        {TokenType::VAR, ParseRule()},
-        {TokenType::WHILE, ParseRule()},
-        {TokenType::ERROR, ParseRule()},
-        {TokenType::TEOF, ParseRule()},
+    Rules result{};
+
+    auto set = [&result](TokenType type, ParseFn prefix, ParseFn infix, Prec prec) constexpr noexcept {
+        result[static_cast<size_t>(type)] = ParseRule{prefix, infix, prec};
     };
 
-    Rules rules{};
+    set(TokenType::LEFT_PAREN, &Compiler::grouping, &Compiler::call, Prec::CALL);
+    set(TokenType::DOT, nullptr, &Compiler::dot, Prec::CALL);
+    set(TokenType::MINUS, &Compiler::unary, &Compiler::binary, Prec::TERM);
+    set(TokenType::PLUS, nullptr, &Compiler::binary, Prec::TERM);
+    set(TokenType::SLASH, nullptr, &Compiler::binary, Prec::FACTOR);
+    set(TokenType::STAR, nullptr, &Compiler::binary, Prec::FACTOR);
+    set(TokenType::BANG, &Compiler::unary, nullptr, Prec::NONE);
+    set(TokenType::BANG_EQUAL, nullptr, &Compiler::binary, Prec::EQUALITY);
+    set(TokenType::EQUAL_EQUAL, nullptr, &Compiler::binary, Prec::EQUALITY);
+    set(TokenType::GREATER, nullptr, &Compiler::binary, Prec::COMPARISON);
+    set(TokenType::GREATER_EQUAL, nullptr, &Compiler::binary, Prec::COMPARISON);
+    set(TokenType::LESS, nullptr, &Compiler::binary, Prec::COMPARISON);
+    set(TokenType::LESS_EQUAL, nullptr, &Compiler::binary, Prec::COMPARISON);
+    set(TokenType::IDENTIFIER, &Compiler::variable, nullptr, Prec::NONE);
+    set(TokenType::STRING, &Compiler::stringy, nullptr, Prec::NONE);
+    set(TokenType::NUMBER, &Compiler::number, nullptr, Prec::NONE);
+    set(TokenType::AND, nullptr, &Compiler::and_, Prec::AND);
+    set(TokenType::FALSE, &Compiler::literal, nullptr, Prec::NONE);
+    set(TokenType::NIL, &Compiler::literal, nullptr, Prec::NONE);
+    set(TokenType::OR, nullptr, &Compiler::or_, Prec::OR);
+    set(TokenType::SUPER, &Compiler::super_, nullptr, Prec::NONE);
+    set(TokenType::THIS, &Compiler::this_, nullptr, Prec::NONE);
+    set(TokenType::TRUE, &Compiler::literal, nullptr, Prec::NONE);
 
-    for(auto it = std::begin(temp); it != std::end(temp); ++it)
-        rules[static_cast<size_t>(it->first)] = it->second;
-    return rules;
+    return result;
 }
+
+constinit const Rules Compiler::rules = RulesMaker::make();
