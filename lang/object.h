@@ -4,7 +4,7 @@
 #include "commons.h"
 #include "table.h"
 
-inline void allocObj(Obj* p);
+void allocObj(Obj* p);
 
 enum class ObjType
 {
@@ -107,7 +107,7 @@ struct ObjBoundMethod: Obj
     ObjBoundMethod(Value val, ObjClosure* c): Obj(ObjType::BOUND_METHOD), receiver(val), method(c) {} 
 };
 
-optional<ObjType> objType(const Value& value);
+std::optional<ObjType> objType(const Value& value);
 bool isType(const Value& value, ObjType type);
 bool is_str(const Value& value);
 const ObjString* as_str(const Value& value);
@@ -131,4 +131,4 @@ void printObject(const Value& value);
 void printValue(const Value& value);
 bool objectsEqual(Obj* left, Obj* right);
 
-inline ObjString* copyString(string_view chars);
+ObjString* copyString(std::string_view chars);

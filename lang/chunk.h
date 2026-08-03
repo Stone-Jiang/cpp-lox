@@ -25,34 +25,15 @@ class Chunk
     friend class VM;
     friend class Compiler;
 private: 
-    vector<u8> code;
-    vector<int> lines;
+    std::vector<u8> code;
+    std::vector<int> lines;
     ValueArray constants;
 public:
     Chunk() = default;
     ~Chunk() = default;
 
-    void write(u8 byte, int line)
-    {
-        code.push_back(byte);
-        lines.push_back(line);
-    }
-
-    int size() const
-    {
-        return static_cast<int>(code.size());
-    }
-
-    int addConst(Value val)
-    {
-        constants.write(val);
-        return constants.size()-1;
-    }
-
-    void clear()
-    {
-        code.clear();
-        lines.clear();
-        constants.values.clear();
-    }
+    void write(u8 byte, int line);
+    int size() const;
+    int addConst(Value val);
+    void clear();
 };

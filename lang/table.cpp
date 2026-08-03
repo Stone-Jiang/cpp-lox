@@ -6,12 +6,12 @@ Table::Table()
     m.max_load_factor(MAX_LOAD_FACTOR);
 }
 
-optional<Value> Table::find(const string& key) const
+std::optional<Value> Table::find(const string& key) const
 {
     auto it = m.find(key);
     if(it==m.end())
-        return nullopt;
-    return make_optional<>(it->second);
+        return std::nullopt;
+    return std::make_optional<>(it->second);
 }
 
 bool Table::get(const string& key, Value& value)

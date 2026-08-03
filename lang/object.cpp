@@ -1,6 +1,6 @@
 #include "object.h"
 
-optional<ObjType> objType(const Value& value)
+std::optional<ObjType> objType(const Value& value)
 {
     if(value.is_obj())
         return value.as_obj()->type;
@@ -100,7 +100,7 @@ void printFunction(const ObjFunction* func)
         std::printf("<fn %s>", func->name.c_str());
 }
 
-ObjString* copyString(string_view chars);
+ObjString* copyString(std::string_view chars);
 
 void printObject(const Value& value)
 {

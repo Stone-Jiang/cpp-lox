@@ -18,7 +18,7 @@
 #include <string_view>
 #include <optional>
 
-using namespace std;
+using std::string;
 
 using u8 = uint8_t;
 using u16 = uint16_t;
