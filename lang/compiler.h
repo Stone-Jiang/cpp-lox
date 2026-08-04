@@ -72,6 +72,15 @@ public:
     bool hasSuper = false;
 };
 
+class LoopCompiler
+{
+public:
+    LoopCompiler* enclosing = nullptr;
+    int scopeDepth = 0;
+    int continueTarget = 0;
+    std::vector<int> breakJumps;
+};
+
 class Compiler
 {
     friend struct RulesMaker;
@@ -91,6 +100,7 @@ private:
     
     inline static Compiler* current = nullptr;
     ClassCompiler* currentClass = nullptr;
+    LoopCompiler* currentLoop = nullptr;
 
     ObjFunction* func = nullptr;
     FunctionType ftype;
@@ -181,6 +191,10 @@ private:
     void printStmt();
     void returnStmt();
     void whileStmt();
+    void breakStmt();
+    void contStmt();
+    void emitLoopCleanup(const LoopCompiler& loop);
+    void patchBreaks(const LoopCompiler& loop);
 
     void beginScope();
     void endScope();

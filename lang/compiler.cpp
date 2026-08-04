@@ -168,6 +168,14 @@ void Compiler::statement()
     {
         ifStmt();
     }
+    else if(match(TokenType::BREAK))
+    {
+        breakStmt();
+    }
+    else if(match(TokenType::CONTINUE))
+    {
+        contStmt();
+    }
     else if(match(TokenType::RETURN))
     {
         returnStmt();
@@ -533,6 +541,12 @@ void Compiler::forStmt()
         patchJump(bodyJump);
     }
 
+    LoopCompiler loop;
+    loop.enclosing = current->currentLoop;
+    loop.scopeDepth = current->scopeDepth;
+    loop.continueTarget = loopStart;
+    current->currentLoop = &loop;
+
     statement();
     emitLoop(loopStart);
 
@@ -542,6 +556,8 @@ void Compiler::forStmt()
         emit(OpCode::POP);
     }
 
+    patchBreaks(loop);
+    current->currentLoop = loop.enclosing;
     endScope();
 }
 
@@ -599,11 +615,68 @@ void Compiler::whileStmt()
 
     int exitJump = emitJump(OpCode::JUMP_IF_FALSE);
     emit(OpCode::POP);
+
+    LoopCompiler loop;
+    loop.enclosing = current->currentLoop;
+    loop.scopeDepth = current->scopeDepth;
+    loop.continueTarget = loopStart;
+    current->currentLoop = &loop;
+
     statement();
     emitLoop(loopStart);
 
     patchJump(exitJump);
     emit(OpCode::POP);
+    patchBreaks(loop);
+    current->currentLoop = loop.enclosing;
+}
+
+void Compiler::breakStmt()
+{
+    LoopCompiler* loop = current->currentLoop;
+    if(loop==nullptr)
+        error("Can't use 'break' outside of a loop.");
+
+    consume(TokenType::SEMICOLON, "Expect ';' after break.");
+
+    if(loop==nullptr)
+        return;
+
+    emitLoopCleanup(*loop);
+    loop->breakJumps.push_back(emitJump(OpCode::JUMP));
+}
+
+void Compiler::contStmt()
+{
+    LoopCompiler* loop = current->currentLoop;
+    if(loop==nullptr)
+        error("Can't use 'continue' outside of a loop.");
+
+    consume(TokenType::SEMICOLON, "Expect ';' after continue.");
+
+    if(loop==nullptr)
+        return;
+
+    emitLoopCleanup(*loop);
+    emitLoop(loop->continueTarget);
+}
+
+void Compiler::emitLoopCleanup(const LoopCompiler& loop)
+{
+    for(int i=current->localCount-1; i>=0; i--)
+    {
+        const Local& local = current->locals[i];
+        if(local.depth<=loop.scopeDepth)
+            break;
+
+        emit(local.isCapt? OpCode::CLOSE_UPVALUE: OpCode::POP);
+    }
+}
+
+void Compiler::patchBreaks(const LoopCompiler& loop)
+{
+    for(int jump: loop.breakJumps)
+        patchJump(jump);
 }
 
 void Compiler::beginScope()
@@ -889,6 +962,8 @@ void Compiler::synchronize()
         case TokenType::WHILE:
         case TokenType::PRINT:
         case TokenType::RETURN:
+        case TokenType::BREAK:
+        case TokenType::CONTINUE:
             return;
         default:
             ;

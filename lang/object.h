@@ -3,12 +3,13 @@
 #include "chunk.h"
 #include "commons.h"
 #include "table.h"
+#include <complex>
 
 void allocObj(Obj* p);
 
 enum class ObjType
 {
-    BOUND_METHOD, CLASS, CLOSURE, FUNCTION, INSTANCE, NATIVE, STRING, UPVALUE, NOT
+    BOUND_METHOD, CLASS, CLOSURE, FUNCTION, INSTANCE, NATIVE, STRING, COMPLEX, UPVALUE, NOT
 };
 
 struct Obj
@@ -28,7 +29,7 @@ struct Obj
     }
 };
 
-struct ObjString: public Obj
+struct ObjString: Obj
 {
     std::string chars;
 
@@ -38,6 +39,13 @@ struct ObjString: public Obj
     { 
         return chars; 
     }
+};
+
+struct ObjComplex: Obj
+{
+    std::complex<double> c;
+
+    ObjComplex(): Obj(ObjType::COMPLEX), c(0) {}
 };
 
 struct ObjFunction: Obj
@@ -109,6 +117,7 @@ struct ObjBoundMethod: Obj
 
 std::optional<ObjType> objType(const Value& value);
 bool isType(const Value& value, ObjType type);
+
 bool is_str(const Value& value);
 const ObjString* as_str(const Value& value);
 const std::string& as_string(const Value& value);
@@ -125,6 +134,15 @@ bool is_instance(const Value& value);
 ObjInstance* as_instance(const Value& value);
 bool is_bound_meth(const Value& value);
 ObjBoundMethod* as_bound_meth(const Value& value);
+
+template <class T>
+concept Objective = std::is_base_of_v<Obj, T>;
+
+template <Objective T>
+bool is(const Value& value);
+
+template <Objective T>
+T* as(const Value& value);
 
 void printFunction(const ObjFunction* func);
 void printObject(const Value& value);

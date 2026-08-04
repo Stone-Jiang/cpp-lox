@@ -330,7 +330,7 @@ Result VM::run()
         {
             Value superclass = peek(1);
 
-            if(!::is_class(superclass))
+            if(!is_class(superclass))
             {
                 runtimeError("Superclass must be a class.");
                 return Result::RUNTIME_ERROR;

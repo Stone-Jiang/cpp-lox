@@ -15,6 +15,7 @@ enum class TokenType
     FOR, FUN, IF, NIL, OR,
     PRINT, RETURN, SUPER, THIS,
     TRUE, VAR, WHILE,
+    BREAK, CONTINUE,
     TEOF, ERROR, NONE
 };
 
@@ -35,7 +36,9 @@ static const std::unordered_map<string, TokenType> keywords =
     {"this",   TokenType::THIS},
     {"true",   TokenType::TRUE},
     {"var",    TokenType::VAR},
-    {"while",  TokenType::WHILE}
+    {"while",  TokenType::WHILE},
+    {"break",  TokenType::BREAK},
+    {"continue",TokenType::CONTINUE}
 };
 
 struct Token
