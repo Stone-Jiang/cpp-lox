@@ -783,7 +783,7 @@ void Compiler::declareVar()
         return;
     Token& name = parser.prev;
 
-    for (int i=current->localCount; i>=0; i--)
+    for (int i=current->localCount-1; i>=0; i--)
     {
         Local* local = &current->locals[i];
         if(local->depth!=-1 && local->depth < current->scopeDepth)

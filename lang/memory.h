@@ -1,73 +1,287 @@
 #pragma once
-#include "commons.h"
+
+#include <cstddef>
+#include <iostream>
+#include <iterator>
+#include <limits>
+#include <new>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 template <typename T>
 class Vector
 {
 private:
-    T* data;
-    int cap, sz;
+    static constexpr size_t VECTOR_MAX = std::numeric_limits<size_t>::max() / sizeof(T);
+    T* arr = nullptr;
+    size_t cap = 0, sz = 0;
 
-    void clear();
-    void resize(int newcap);
+    size_t nextCapacity() const
+    {
+        if(cap == VECTOR_MAX)
+            throw std::length_error("vector too big");
+        if(cap == 0)
+            return 1;
+        return cap > VECTOR_MAX / 2 ? VECTOR_MAX : cap * 2;
+    }
 
 public:
-    Vector(): data(nullptr), cap(0), sz(0) {}
+    void clear()
+    {
+        for(size_t i=0; i<sz; i++)
+            arr[i].~T();
+        sz = 0;
+    }
+
+    void expand(size_t newcap)
+    {
+        reserve(newcap);
+    }
+
+    Vector() = default;
 
     ~Vector()
     {
         clear();
-        ::operator delete(data);
+        ::operator delete(arr);
     }
 
-    Vector(const Vector& other): data(nullptr), cap(0), sz(0)
+    Vector(const Vector& other)
     {
         if(other.sz>0)
         {
             void* raw = ::operator new(sizeof(T)*other.sz);
-            data = static_cast<T*>(raw);
+            arr = static_cast<T*>(raw);
             cap = other.sz;
 
-            for(int i=0; i<other.sz; i++)
-                new (&data[i]) T(other.data[i]);
-            sz = other.sz;
+            try
+            {
+                for(; sz<other.sz; ++sz)
+                    new (&arr[sz]) T(other.arr[sz]);
+            }
+            catch(...)
+            {
+                clear();
+                ::operator delete(arr);
+                arr = nullptr;
+                cap = 0;
+                throw;
+            }
         }
     }
 
-    Vector(Vector&& other) noexcept: data(other.data), cap(other.cap), sz(other.sz)
+    Vector(Vector&& other) noexcept: arr(other.arr), cap(other.cap), sz(other.sz)
     {
-        other.data = nullptr;
+        other.arr = nullptr;
         other.sz = 0;
         other.cap = 0;
     }
 
-    Vector& operator=(const Vector& other);
-    Vector& operator=(Vector&& other);
+    Vector& operator=(const Vector& other)
+    {
+        if(this == &other)
+            return *this;
 
-    void push_back(const T& val);
-    void push_back(T&& val);
-    void pop_back();
+        Vector temp(other);
+        swap(temp);
+        return *this;
+    }
 
-    int size() const;
-    bool empty() const;
-    int capacity() const;
+    Vector& operator=(Vector&& other) noexcept
+    {
+        if(this==&other)
+            return *this;
 
-    T& get(int index);
-    const T& get(int index) const;
-    T& operator[](int index);
-    const T& operator[](int index) const;
+        clear();
+        ::operator delete(arr);
+        arr = other.arr;
+        sz = other.sz;
+        cap = other.cap;
+
+        other.arr = nullptr;
+        other.sz = 0;
+        other.cap = 0;
+
+        return *this;
+    }
+
+    void push_back(const T& val)
+    {
+        if(sz == cap)
+            expand(nextCapacity());
+
+        new (&arr[sz]) T(val);
+        sz++;
+    }
+
+    void push_back(T&& val)
+    {
+        if(sz == cap)
+            expand(nextCapacity());
+
+        new (&arr[sz]) T(std::move(val));
+        sz++;
+    }
+
+    void pop_back()
+    {
+        if(sz==0)
+            throw std::out_of_range("vector is empty");
+        sz--;
+        arr[sz].~T();
+    }
+
+    size_t size() const
+    {
+        return sz;
+    }
+
+    bool empty() const
+    {
+        return sz==0;
+    }
+
+    size_t capacity() const
+    {
+        return cap;
+    }
+
+    void resize(size_t count)
+    {
+        if(count == sz)
+            return;
+
+        if(count > sz)
+        {
+            if(count > cap)
+                reserve(count);
+
+            while(sz < count)
+            {
+                new (&arr[sz]) T();
+                ++sz;
+            }
+            return;
+        }
+
+        while(sz > count)
+            pop_back();
+    }
+
+    void shrink_to_fit()
+    {
+        if(sz == 0)
+        {
+            clear();
+            ::operator delete(arr);
+            arr = nullptr;
+            cap = 0;
+            return;
+        }
+
+        if(sz == cap)
+            return;
+
+        T* newdata = static_cast<T*>(::operator new(sizeof(T) * sz));
+        size_t i = 0;
+
+        try
+        {
+            for(; i<sz; ++i)
+                new (&newdata[i]) T(std::move_if_noexcept(arr[i]));
+        }
+        catch(...)
+        {
+            for(size_t j = 0; j < i; ++j)
+                newdata[j].~T();
+            ::operator delete(newdata);
+            throw;
+        }
+
+        for(size_t i = 0; i < sz; ++i)
+            arr[i].~T();
+
+        ::operator delete(arr);
+        arr = newdata;
+        cap = sz;
+    }
+
+    T& get(size_t index)
+    {
+        if(index >= sz)
+            throw std::out_of_range("index out of bounds");
+        return arr[index];
+    }
+
+    const T& get(size_t index) const
+    {
+        if(index >= sz)
+            throw std::out_of_range("index out of bounds");
+        return arr[index];
+    }
+
+    T& at(size_t index)
+    {
+        return get(index);
+    }
+
+    const T& at(size_t index) const
+    {
+        return get(index);
+    }
+
+    T& operator[](size_t index)
+    {
+        return arr[index];
+    }
+
+    const T& operator[](size_t index) const
+    {
+        return arr[index];
+    }
+
+    T& front()
+    {
+        return get(0);
+    }
+
+    const T& front() const
+    {
+        return get(0);
+    }
+
+    T& back()
+    {
+        return get(sz-1);
+    }
+
+    const T& back() const
+    {
+        return get(sz-1);
+    }
+
+    T* data()
+    {
+        return arr;
+    }
+
+    const T* data() const
+    {
+        return arr;
+    }
 
     void print(std::ostream& os = std::cout) const
     {
         os<<"[";
-        for(int i=0; i<sz; i++)
+        for(size_t i=0; i<sz; i++)
         {
-            os<<data[i];
+            os<<arr[i];
             if(i+1 < sz)
                 os<<", ";
         }
         os<<"]";
-    }   
+    }
 
     friend std::ostream& operator<<(std::ostream& os, const Vector& vec)
     {
@@ -75,91 +289,215 @@ public:
         return os;
     }
 
-    void swap(Vector& other) noexcept;
-    void reserve(int newcap);
-    void insert(int pos, const T& val);
-    void erase(int pos);
-
-    class Iterator
+    void swap(Vector& other) noexcept
     {
+        std::swap(arr, other.arr);
+        std::swap(sz, other.sz);
+        std::swap(cap, other.cap);
+    }
+
+    void reserve(size_t newcap)
+    {
+        if(newcap > VECTOR_MAX)
+            throw std::length_error("vector too big");
+        if(newcap <= cap)
+            return;
+
+        void* raw = ::operator new(sizeof(T) * newcap);
+        T* newdata = static_cast<T*>(raw);
+        size_t i = 0;
+        try
+        {
+            for(; i<sz; ++i)
+                new (&newdata[i]) T(std::move_if_noexcept(arr[i]));
+        }
+        catch(...)
+        {
+            for(size_t j = 0; j < i; ++j)
+                newdata[j].~T();
+            ::operator delete(newdata);
+            throw;
+        }
+
+        for(size_t i = 0; i < sz; ++i)
+            arr[i].~T();
+
+        ::operator delete(arr);
+        arr = newdata;
+        cap = newcap;
+    }
+
+    void insert(int pos, const T& val)
+    {
+        if(pos < 0 || static_cast<size_t>(pos) > sz)
+            throw std::out_of_range("index out of bounds");
+        if(sz==cap)
+            expand(nextCapacity());
+
+        for(size_t i=sz; i>static_cast<size_t>(pos); --i)
+        {
+            new (&arr[i]) T(std::move(arr[i-1]));
+            arr[i-1].~T();
+        }
+
+        new (&arr[pos]) T(val);
+        sz++;
+    }
+
+    void erase(int pos)
+    {
+        if(pos < 0 || static_cast<size_t>(pos) >= sz)
+            throw std::out_of_range("index out of bounds");
+
+        const size_t index = static_cast<size_t>(pos);
+        for(size_t i=index; i+1<sz; ++i)
+            arr[i] = std::move(arr[i+1]);
+
+        --sz;
+        arr[sz].~T();
+    }
+
+    template <bool IsConst>
+    class BasicIterator
+    {
+        template <bool>
+        friend class BasicIterator;
+
     public:
         using value_type = T;
-        using difference_type = ptrdiff_t;
-        using pointer = T*;
-        using reference = T&;
+        using difference_type = std::ptrdiff_t;
+        using pointer = std::conditional_t<IsConst, const T*, T*>;
+        using reference = std::conditional_t<IsConst, const T&, T&>;
         using iterator_category = std::random_access_iterator_tag;
+        using iterator_concept = std::random_access_iterator_tag;
     
     private:
-        T* ptr;
-    public:
-        Iterator(T* p = nullptr): ptr(p) {}
+        pointer ptr = nullptr;
 
-        T& operator*() const
+    public:
+        BasicIterator() = default;
+        explicit BasicIterator(pointer p): ptr(p) {}
+
+        template <bool OtherConst>
+        requires (IsConst || !OtherConst)
+        BasicIterator(const BasicIterator<OtherConst>& other): ptr(other.ptr) {}
+
+        reference operator*() const
         {
             return *ptr;
         }
 
-        T* operator->() const
+        pointer operator->() const
         {
             return ptr;
         }
 
-        Iterator& operator++()
+        BasicIterator& operator++()
         {
             ptr++;
             return *this;
         }
 
-        Iterator& operator--()
+        BasicIterator& operator--()
         {
             ptr--;
             return *this;
         }
 
-        Iterator operator++(int)
+        BasicIterator operator++(int)
         {
-            Iterator temp = *this;
+            BasicIterator temp = *this;
             ++(*this);
             return temp;
         }
 
-        Iterator operator--(int)
+        BasicIterator operator--(int)
         {
-            Iterator temp = *this;
+            BasicIterator temp = *this;
             --(*this);
             return temp;
         }
 
-        Iterator operator+(int n) const
+        BasicIterator& operator+=(difference_type n)
         {
-            return Iterator(ptr+n);
+            ptr += n;
+            return *this;
         }
 
-        Iterator operator-(int n) const
+        BasicIterator& operator-=(difference_type n)
         {
-            return Iterator(ptr-n);
+            ptr -= n;
+            return *this;
         }
 
-        ptrdiff_t operator-(const Iterator& other) const
+        BasicIterator operator+(difference_type n) const
+        {
+            BasicIterator temp = *this;
+            temp += n;
+            return temp;
+        }
+
+        BasicIterator operator-(difference_type n) const
+        {
+            BasicIterator temp = *this;
+            temp -= n;
+            return temp;
+        }
+
+        difference_type operator-(const BasicIterator& other) const
         {
             return ptr - other.ptr;
         }
 
-        bool operator==(const Iterator& other){return ptr == other.ptr;}
-        bool operator!=(const Iterator& other){return ptr != other.ptr;}
-        bool operator<(const Iterator& other) {return ptr<other.ptr;}
-        bool operator>(const Iterator& other) {return ptr>other.ptr;}
-        bool operator<=(const Iterator& other) {return ptr<=other.ptr;}
-        bool operator>=(const Iterator& other) {return ptr>=other.ptr;}
+        reference operator[](difference_type n) const
+        {
+            return ptr[n];
+        }
+
+        friend BasicIterator operator+(difference_type n, BasicIterator iterator)
+        {
+            iterator += n;
+            return iterator;
+        }
+
+        bool operator==(const BasicIterator& other) const {return ptr == other.ptr;}
+        bool operator!=(const BasicIterator& other) const {return ptr != other.ptr;}
+        bool operator<(const BasicIterator& other) const {return ptr < other.ptr;}
+        bool operator>(const BasicIterator& other) const {return ptr > other.ptr;}
+        bool operator<=(const BasicIterator& other) const {return ptr <= other.ptr;}
+        bool operator>=(const BasicIterator& other) const {return ptr >= other.ptr;}
     };
 
-    Iterator begin() const
+    using Iterator = BasicIterator<false>;
+    using ConstIterator = BasicIterator<true>;
+
+    Iterator begin()
     {
-        return Iterator(data);
+        return Iterator(arr);
     }
 
-    Iterator end() const
+    Iterator end()
     {
-        return Iterator(data+sz);
+        return Iterator(arr == nullptr ? nullptr : arr+sz);
+    }
+
+    ConstIterator begin() const
+    {
+        return ConstIterator(arr);
+    }
+
+    ConstIterator end() const
+    {
+        return ConstIterator(arr == nullptr ? nullptr : arr+sz);
+    }
+
+    ConstIterator cbegin() const
+    {
+        return begin();
+    }
+
+    ConstIterator cend() const
+    {
+        return end();
     }
 };

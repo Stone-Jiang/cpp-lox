@@ -826,4 +826,3 @@ ObjString* copyString(std::string_view chars)
     VM::vm.strings.set(string->str(), Value(string));
     return string;
 }
-

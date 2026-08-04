@@ -69,7 +69,6 @@ private:
     bool isAtEnd();
 
     char advance();
-
     char peek();
     char peekNext();
 
@@ -80,9 +79,7 @@ private:
     TokenType identifierType() const;
 
     Token identifier();
-
     Token number();
-
     Token stringy();
 
 };

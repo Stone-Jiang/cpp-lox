@@ -3,7 +3,9 @@
 
 Table::Table()
 {
+    #ifndef BETTER_HASH_TABLE
     m.max_load_factor(MAX_LOAD_FACTOR);
+    #endif
 }
 
 std::optional<Value> Table::find(const string& key) const

@@ -37,23 +37,16 @@ public:
         }
         return 0;
     }
-
-    static int run()
-    {
-        std::cout<<"Enter file path or press enter to start REPL: ";
-        string str;
-        std::getline(std::cin, str);
-
-        if(str.empty())
-            return repl();
-        else
-            return process(str);
-    }
 };
 
-int main()
+int main(int argc, char* argv[])
 {
-    std::cout<<"----- Lox Running on C++ "<<__cplusplus<<" -----\n";
+    if(argc==2)
+        return Runtime::process(argv[1]);
 
-    return Runtime::run();
+    std::cout<<"Enter file path or press enter to start REPL: ";
+    string str;
+    std::getline(std::cin, str);
+
+    return str.empty()? Runtime::repl(): Runtime::process(str);
 }

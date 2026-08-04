@@ -1,5 +1,17 @@
 #include "scanner.h"
 
+bool isAlpha(char c)
+{
+    return (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+bool isNumber(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+
 Scanner::Scanner(const string& str)
 {
     src = str;
@@ -16,9 +28,9 @@ Token Scanner::scan()
         return Token(TokenType::TEOF, nullptr, 0, line);
     
     char c = advance();
-    if(isalpha(c))
+    if(isAlpha(c))
         return identifier();
-    if(isdigit(c))
+    if(isNumber(c))
         return number();
 
     switch(c)
@@ -131,19 +143,19 @@ TokenType Scanner::identifierType() const
 
 Token Scanner::identifier()
 {
-    while (isalpha(peek()) || isdigit(peek()))
+    while (isAlpha(peek()) || isNumber(peek()))
         advance();
     return tok(identifierType());
 }
 
 Token Scanner::number()
 {
-    while(isdigit(peek()))
+    while(isNumber(peek()))
         advance();
-    if(peek()=='.' && isdigit(peekNext()))
+    if(peek()=='.' && isNumber(peekNext()))
     {
         advance();
-        while(isdigit(peek()))
+        while(isNumber(peek()))
             advance();
     }
     return tok(TokenType::NUMBER);
