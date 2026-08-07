@@ -12,10 +12,12 @@
 template <typename T>
 class Vector
 {
+    friend class VM;
 private:
     static constexpr size_t VECTOR_MAX = std::numeric_limits<size_t>::max() / sizeof(T);
     T* arr = nullptr;
     size_t cap = 0, sz = 0;
+    VM* owner = nullptr;
 
     size_t nextCapacity() const
     {
@@ -296,36 +298,7 @@ public:
         std::swap(cap, other.cap);
     }
 
-    void reserve(size_t newcap)
-    {
-        if(newcap > VECTOR_MAX)
-            throw std::length_error("vector too big");
-        if(newcap <= cap)
-            return;
-
-        void* raw = ::operator new(sizeof(T) * newcap);
-        T* newdata = static_cast<T*>(raw);
-        size_t i = 0;
-        try
-        {
-            for(; i<sz; ++i)
-                new (&newdata[i]) T(std::move_if_noexcept(arr[i]));
-        }
-        catch(...)
-        {
-            for(size_t j = 0; j < i; ++j)
-                newdata[j].~T();
-            ::operator delete(newdata);
-            throw;
-        }
-
-        for(size_t i = 0; i < sz; ++i)
-            arr[i].~T();
-
-        ::operator delete(arr);
-        arr = newdata;
-        cap = newcap;
-    }
+    void reserve(size_t newcap);
 
     void insert(int pos, const T& val)
     {
@@ -501,3 +474,37 @@ public:
         return end();
     }
 };
+
+#include "vm.h"
+
+template <typename T>
+void Vector<T>::reserve(size_t newcap)
+{
+    if(newcap > VECTOR_MAX)
+        throw std::length_error("vector too big");
+    if(newcap <= cap)
+        return;
+
+    void* raw = ::operator new(sizeof(T) * newcap);
+    T* newdata = static_cast<T*>(raw);
+    size_t i = 0;
+    try
+    {
+        for(; i<sz; ++i)
+            new (&newdata[i]) T(std::move_if_noexcept(arr[i]));
+    }
+    catch(...)
+    {
+        for(size_t j = 0; j < i; ++j)
+            newdata[j].~T();
+        ::operator delete(newdata);
+        throw;
+    }
+
+    for(size_t i = 0; i < sz; ++i)
+        arr[i].~T();
+
+    ::operator delete(arr);
+    arr = newdata;
+    cap = newcap;
+}

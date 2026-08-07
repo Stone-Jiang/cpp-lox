@@ -21,7 +21,9 @@ Result VM::interpret(const string& src)
     frameCount = 0;
     stack.clear();
 
-    
+    frames.owner = this;
+    stack.owner = this;
+    grayStack.owner = this;
 
     auto* func = Compiler::comp.compile(src);
     if(func == nullptr)
@@ -634,6 +636,7 @@ void VM::collectGarbage()
 {
     #ifdef DEBUG_LOG_GC
     printf("-- gc begin\n");
+    size_t before = bytesAlloc;
     #endif
 
     markRoots();
@@ -641,8 +644,11 @@ void VM::collectGarbage()
     removeWhite(strings);
     sweep();
 
+    nextGC = bytesAlloc * HEAP_GROW_FACTOR;
+
     #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
+    printf("collected %zu bytes (from %zu to %zu) next at %zu\n", before-bytesAlloc, before, bytesAlloc);
     #endif
 }
 

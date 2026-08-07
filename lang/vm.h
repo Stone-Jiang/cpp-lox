@@ -5,6 +5,7 @@
 #include "object.h"
 #include "debug.h"
 #include "table.h"
+#include "memory.h"
 
 enum class Result
 {
@@ -23,17 +24,17 @@ class VM
     friend class Compiler;
     friend void allocObj(Obj*);
 
-    std::vector<CallFrame> frames;
+    Vector<CallFrame> frames;
     int frameCount = 0;
 
-    std::vector<Value> stack;
+    Vector<Value> stack;
 
     Obj* objects = nullptr;
     ObjUpvalue* openUpvalues = nullptr;
 
     Table globals;
 
-    std::vector<Obj*> grayStack;
+    Vector<Obj*> grayStack;
 
     size_t bytesAlloc = 0;
     size_t nextGC = 1024*1024;

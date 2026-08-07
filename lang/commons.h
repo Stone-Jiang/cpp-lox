@@ -16,6 +16,8 @@
 #include <cstdio>
 #include <cstring>
 #include <time.h>
+#include <cmath>
+#include <limits>
 
 #include "../switches.h"
 
