@@ -7,7 +7,12 @@ VM::VM()
 {
     frames.reserve(FRAMES_MAX);
     stack.reserve(STACK_MAX);
-    defineNative("clock", clockNative);
+
+    const auto natives = nativeDefinitions();
+    globals.reserve(natives.size());
+
+    for(const auto& nat: natives)
+        defineNative(nat);
 }
 
 VM::~VM()
@@ -168,7 +173,7 @@ Result VM::run()
         }
         case OpCode::GET_GLOBAL:
         {
-            string name = read_str(frame);
+            const string& name = read_str(frame);
             Value value;
             if(!globals.get(name, value))
             {
@@ -440,6 +445,8 @@ void VM::freeObj(Obj* object)
     case ObjType::BOUND_METHOD:
         delete static_cast<ObjBoundMethod*>(object);
         break;
+    case ObjType::COMPLEX:
+        delete static_cast<ObjComplex*>(object);
     default:
         delete object;
         break;
@@ -471,7 +478,13 @@ bool VM::callValue(Value callee, int argCount)
         case ObjType::NATIVE:
         {
             auto native = as_native(callee);
-            Value result = native(
+            if(native->arity >= 0 && argCount != native->arity)
+            {
+                runtimeError("Expected {} arguments but got {}.", native->arity, argCount);
+                return false;
+            }
+
+            Value result = native->func(
                 argCount,
                 stack.data() + stack.size() - static_cast<size_t>(argCount));
             stack.resize(stack.size() - static_cast<size_t>(argCount) - 1);
@@ -533,12 +546,10 @@ bool VM::call(ObjClosure* clos, int argCount)
     return true;
 }
 
-void VM::defineNative(const string& name, NativeFn func)
+void VM::defineNative(const NativeDef& def)
 {
-    push(Value(copyString(name)));
-    push(Value(new ObjNative(func)));
-    globals.set(name, stack[1]);
-    pop();
+    push(Value(new ObjNative(def.function, def.arity)));
+    globals.set(string(def.name), peek(0));
     pop();
 }
 
@@ -632,6 +643,8 @@ void VM::defineMethod(const string& name)
     pop();
 }
 
+// ----GC----
+
 void VM::collectGarbage()
 {
     #ifdef DEBUG_LOG_GC
@@ -660,7 +673,7 @@ void VM::markRoots()
     for(auto fr: frames)
         markObject(static_cast<Obj*>(fr.clos));
 
-    for(auto upval = openUpvalues; upval!=nullptr; upval->next)
+    for(auto upval = openUpvalues; upval!=nullptr; upval = upval->next)
         markObject(static_cast<Obj*>(upval));
     
     markTable(globals);
@@ -751,6 +764,7 @@ void VM::blackenObject(Obj* object)
         auto inst = static_cast<ObjInstance*>(object);
         markObject(static_cast<Obj*>(inst->klass));
         markTable(inst->fields);
+        break;
     }
     case ObjType::CLOSURE:
     {
@@ -832,3 +846,5 @@ ObjString* copyString(std::string_view chars)
     VM::vm.strings.set(string->str(), Value(string));
     return string;
 }
+
+

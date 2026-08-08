@@ -3,6 +3,7 @@
 #include "chunk.h"
 #include "commons.h"
 #include "table.h"
+#include "native.h"
 #include <complex>
 
 void allocObj(Obj* p);
@@ -46,6 +47,7 @@ struct ObjComplex: Obj
     std::complex<double> c;
 
     ObjComplex(): Obj(ObjType::COMPLEX), c(0) {}
+    ObjComplex(double r, double i): Obj(ObjType::COMPLEX), c(r, i) {}
 };
 
 struct ObjFunction: Obj
@@ -58,12 +60,12 @@ struct ObjFunction: Obj
     ObjFunction(): Obj(ObjType::FUNCTION) {}
 };
 
-typedef Value (*NativeFn)(int argCount, Value* args);
-
 struct ObjNative: Obj
 {
     NativeFn func;
-    ObjNative(NativeFn nf): Obj(ObjType::NATIVE), func(nf) {}
+    int arity;
+
+    ObjNative(NativeFn nf, int a): Obj(ObjType::NATIVE), func(nf), arity(a) {}
 };
 
 struct ObjUpvalue: Obj
@@ -125,7 +127,7 @@ const char* as_cstr(const Value& value);
 bool is_func(const Value& value);
 ObjFunction* as_func(const Value& value);
 bool is_native(const Value& value);
-NativeFn as_native(const Value& value);
+ObjNative* as_native(const Value& value);
 bool is_closure(const Value& value);
 ObjClosure* as_closure(const Value& value);
 bool is_class(const Value& value);

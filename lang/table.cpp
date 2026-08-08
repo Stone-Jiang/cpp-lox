@@ -4,7 +4,7 @@
 Table::Table()
 {
     #ifndef BETTER_HASH_TABLE
-    m.max_load_factor(MAX_LOAD_FACTOR);
+    m.max_load_factor(MAX_LOAD_FACTOR_F);
     #endif
 }
 
@@ -27,9 +27,8 @@ bool Table::get(const string& key, Value& value)
 
 bool Table::set(const string& key, Value val)
 {
-    bool flag = (m.find(key)==m.end());
-    m[key] = val;
-    return flag;
+    auto [it, inserted] = m.insert_or_assign(key, val);
+    return inserted;
 }
 
 bool Table::del(const string& key)
@@ -41,4 +40,9 @@ bool Table::del(const string& key)
 size_t Table::size() const
 {
     return m.size();
+}
+
+void Table::reserve(size_t cap)
+{
+    m.reserve(cap);
 }

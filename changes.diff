@@ -1,0 +1,277 @@
+diff --git a/lang/commons.h b/lang/commons.h
+index 6499f65..ee3fe4f 100644
+--- a/lang/commons.h
++++ b/lang/commons.h
+@@ -15,7 +15,6 @@
+ #include <cstdint>
+ #include <cstdio>
+ #include <cstring>
+-#include <time.h>
+ #include <cmath>
+ #include <limits>
+ 
+diff --git a/lang/memory.h b/lang/memory.h
+index 9c54eee..4e1fb43 100644
+--- a/lang/memory.h
++++ b/lang/memory.h
+@@ -507,4 +507,8 @@ void Vector<T>::reserve(size_t newcap)
+     ::operator delete(arr);
+     arr = newdata;
+     cap = newcap;
++
++    #ifdef DEBUG_STRESS_GC
++    owner->collectGarbage();
++    #endif
+ }
+\ No newline at end of file
+diff --git a/lang/object.cpp b/lang/object.cpp
+index 5aa64f6..4aa9e6d 100644
+--- a/lang/object.cpp
++++ b/lang/object.cpp
+@@ -47,9 +47,9 @@ bool is_native(const Value& value)
+     return isType(value, ObjType::NATIVE);
+ }
+ 
+-NativeFn as_native(const Value& value)
++ObjNative* as_native(const Value& value)
+ {
+-    return static_cast<ObjNative*>(value.as_obj())->func;
++    return static_cast<ObjNative*>(value.as_obj());
+ }
+ 
+ bool is_closure(const Value& value)
+diff --git a/lang/object.h b/lang/object.h
+index 299f01a..e1ee315 100644
+--- a/lang/object.h
++++ b/lang/object.h
+@@ -3,6 +3,7 @@
+ #include "chunk.h"
+ #include "commons.h"
+ #include "table.h"
++#include "native.h"
+ #include <complex>
+ 
+ void allocObj(Obj* p);
+@@ -46,6 +47,7 @@ struct ObjComplex: Obj
+     std::complex<double> c;
+ 
+     ObjComplex(): Obj(ObjType::COMPLEX), c(0) {}
++    ObjComplex(double r, double i): Obj(ObjType::COMPLEX), c(r, i) {}
+ };
+ 
+ struct ObjFunction: Obj
+@@ -58,12 +60,12 @@ struct ObjFunction: Obj
+     ObjFunction(): Obj(ObjType::FUNCTION) {}
+ };
+ 
+-typedef Value (*NativeFn)(int argCount, Value* args);
+-
+ struct ObjNative: Obj
+ {
+     NativeFn func;
+-    ObjNative(NativeFn nf): Obj(ObjType::NATIVE), func(nf) {}
++    int arity;
++
++    ObjNative(NativeFn nf, int a): Obj(ObjType::NATIVE), func(nf), arity(a) {}
+ };
+ 
+ struct ObjUpvalue: Obj
+@@ -125,7 +127,7 @@ const char* as_cstr(const Value& value);
+ bool is_func(const Value& value);
+ ObjFunction* as_func(const Value& value);
+ bool is_native(const Value& value);
+-NativeFn as_native(const Value& value);
++ObjNative* as_native(const Value& value);
+ bool is_closure(const Value& value);
+ ObjClosure* as_closure(const Value& value);
+ bool is_class(const Value& value);
+@@ -149,4 +151,4 @@ void printObject(const Value& value);
+ void printValue(const Value& value);
+ bool objectsEqual(Obj* left, Obj* right);
+ 
+-ObjString* copyString(std::string_view chars);
+\ No newline at end of file
++ObjString* copyString(std::string_view chars);
+diff --git a/lang/table.cpp b/lang/table.cpp
+index 4a9fdd7..f7924f6 100644
+--- a/lang/table.cpp
++++ b/lang/table.cpp
+@@ -4,7 +4,7 @@
+ Table::Table()
+ {
+     #ifndef BETTER_HASH_TABLE
+-    m.max_load_factor(MAX_LOAD_FACTOR);
++    m.max_load_factor(MAX_LOAD_FACTOR_F);
+     #endif
+ }
+ 
+@@ -27,9 +27,8 @@ bool Table::get(const string& key, Value& value)
+ 
+ bool Table::set(const string& key, Value val)
+ {
+-    bool flag = (m.find(key)==m.end());
+-    m[key] = val;
+-    return flag;
++    auto [it, inserted] = m.insert_or_assign(key, val);
++    return inserted;
+ }
+ 
+ bool Table::del(const string& key)
+@@ -41,4 +40,9 @@ bool Table::del(const string& key)
+ size_t Table::size() const
+ {
+     return m.size();
++}
++
++void Table::reserve(size_t cap)
++{
++    m.reserve(cap);
+ }
+\ No newline at end of file
+diff --git a/lang/table.h b/lang/table.h
+index 04a7ea7..4cf717e 100644
+--- a/lang/table.h
++++ b/lang/table.h
+@@ -23,4 +23,5 @@ public:
+     bool set(const string& key, Value val);
+     bool del(const string& key);
+     size_t size() const;
++    void reserve(size_t cap);
+ };
+diff --git a/lang/vm.cpp b/lang/vm.cpp
+index d4fc495..fdc7840 100644
+--- a/lang/vm.cpp
++++ b/lang/vm.cpp
+@@ -7,7 +7,12 @@ VM::VM()
+ {
+     frames.reserve(FRAMES_MAX);
+     stack.reserve(STACK_MAX);
+-    defineNative("clock", clockNative);
++
++    const auto natives = nativeDefinitions();
++    globals.reserve(natives.size());
++
++    for(const auto& nat: natives)
++        defineNative(nat);
+ }
+ 
+ VM::~VM()
+@@ -168,7 +173,7 @@ Result VM::run()
+         }
+         case OpCode::GET_GLOBAL:
+         {
+-            string name = read_str(frame);
++            const string& name = read_str(frame);
+             Value value;
+             if(!globals.get(name, value))
+             {
+@@ -440,6 +445,8 @@ void VM::freeObj(Obj* object)
+     case ObjType::BOUND_METHOD:
+         delete static_cast<ObjBoundMethod*>(object);
+         break;
++    case ObjType::COMPLEX:
++        delete static_cast<ObjComplex*>(object);
+     default:
+         delete object;
+         break;
+@@ -471,7 +478,13 @@ bool VM::callValue(Value callee, int argCount)
+         case ObjType::NATIVE:
+         {
+             auto native = as_native(callee);
+-            Value result = native(
++            if(native->arity >= 0 && argCount != native->arity)
++            {
++                runtimeError("Expected {} arguments but got {}.", native->arity, argCount);
++                return false;
++            }
++
++            Value result = native->func(
+                 argCount,
+                 stack.data() + stack.size() - static_cast<size_t>(argCount));
+             stack.resize(stack.size() - static_cast<size_t>(argCount) - 1);
+@@ -533,12 +546,10 @@ bool VM::call(ObjClosure* clos, int argCount)
+     return true;
+ }
+ 
+-void VM::defineNative(const string& name, NativeFn func)
++void VM::defineNative(const NativeDef& def)
+ {
+-    push(Value(copyString(name)));
+-    push(Value(new ObjNative(func)));
+-    globals.set(name, stack[1]);
+-    pop();
++    push(Value(new ObjNative(def.function, def.arity)));
++    globals.set(string(def.name), peek(0));
+     pop();
+ }
+ 
+@@ -632,6 +643,8 @@ void VM::defineMethod(const string& name)
+     pop();
+ }
+ 
++// ----GC----
++
+ void VM::collectGarbage()
+ {
+     #ifdef DEBUG_LOG_GC
+@@ -660,7 +673,7 @@ void VM::markRoots()
+     for(auto fr: frames)
+         markObject(static_cast<Obj*>(fr.clos));
+ 
+-    for(auto upval = openUpvalues; upval!=nullptr; upval->next)
++    for(auto upval = openUpvalues; upval!=nullptr; upval = upval->next)
+         markObject(static_cast<Obj*>(upval));
+     
+     markTable(globals);
+@@ -751,6 +764,7 @@ void VM::blackenObject(Obj* object)
+         auto inst = static_cast<ObjInstance*>(object);
+         markObject(static_cast<Obj*>(inst->klass));
+         markTable(inst->fields);
++        break;
+     }
+     case ObjType::CLOSURE:
+     {
+@@ -832,3 +846,5 @@ ObjString* copyString(std::string_view chars)
+     VM::vm.strings.set(string->str(), Value(string));
+     return string;
+ }
++
++
+diff --git a/lang/vm.h b/lang/vm.h
+index 2a09bcf..3aa4ec3 100644
+--- a/lang/vm.h
++++ b/lang/vm.h
+@@ -6,6 +6,7 @@
+ #include "debug.h"
+ #include "table.h"
+ #include "memory.h"
++#include "native.h"
+ 
+ enum class Result
+ {
+@@ -109,7 +110,7 @@ private:
+ 
+     bool callValue(Value callee, int argCount);
+     bool call(ObjClosure* clos, int argCount);
+-    void defineNative(const string& name, NativeFn func);
++    void defineNative(const NativeDef& def);
+     ObjUpvalue* captureUpvalue(Value* local);
+     void closeUpvalues(Value* last);
+     bool bindMethod(ObjClass* klass, const string& name);
+@@ -133,13 +134,8 @@ private:
+ 
+     void markArray(ValueArray& array);
+     void sweep();
+-
+-    // ------
+-    static Value clockNative(int, Value*)
+-    {
+-        return Value(static_cast<double>(clock())/CLOCKS_PER_SEC);
+-    }
+ };
+ 
+ void allocObj(Obj* p);
+-ObjString* copyString(std::string_view chars);
+\ No newline at end of file
++ObjString* copyString(std::string_view chars);
++

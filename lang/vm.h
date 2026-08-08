@@ -6,6 +6,7 @@
 #include "debug.h"
 #include "table.h"
 #include "memory.h"
+#include "native.h"
 
 enum class Result
 {
@@ -109,7 +110,7 @@ private:
 
     bool callValue(Value callee, int argCount);
     bool call(ObjClosure* clos, int argCount);
-    void defineNative(const string& name, NativeFn func);
+    void defineNative(const NativeDef& def);
     ObjUpvalue* captureUpvalue(Value* local);
     void closeUpvalues(Value* last);
     bool bindMethod(ObjClass* klass, const string& name);
@@ -133,13 +134,8 @@ private:
 
     void markArray(ValueArray& array);
     void sweep();
-
-    // ------
-    static Value clockNative(int, Value*)
-    {
-        return Value(static_cast<double>(clock())/CLOCKS_PER_SEC);
-    }
 };
 
 void allocObj(Obj* p);
 ObjString* copyString(std::string_view chars);
+

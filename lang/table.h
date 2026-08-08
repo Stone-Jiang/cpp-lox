@@ -23,4 +23,5 @@ public:
     bool set(const string& key, Value val);
     bool del(const string& key);
     size_t size() const;
+    void reserve(size_t cap);
 };

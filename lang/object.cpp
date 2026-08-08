@@ -47,9 +47,9 @@ bool is_native(const Value& value)
     return isType(value, ObjType::NATIVE);
 }
 
-NativeFn as_native(const Value& value)
+ObjNative* as_native(const Value& value)
 {
-    return static_cast<ObjNative*>(value.as_obj())->func;
+    return static_cast<ObjNative*>(value.as_obj());
 }
 
 bool is_closure(const Value& value)
