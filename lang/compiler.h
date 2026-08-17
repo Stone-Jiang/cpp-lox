@@ -78,7 +78,9 @@ public:
     LoopCompiler* enclosing = nullptr;
     int scopeDepth = 0;
     int continueTarget = 0;
-    std::vector<int> breakJumps;
+    Vector<int> breakJumps;
+
+    explicit LoopCompiler(VM* owner = nullptr): breakJumps(owner) {}
 };
 
 class Compiler
@@ -86,6 +88,7 @@ class Compiler
     friend struct RulesMaker;
 private:
     Compiler* enclosing = nullptr;
+    VM* owner = nullptr;
 
     Parser parser;
     std::unique_ptr<Scanner> scanner = nullptr; 
@@ -105,14 +108,27 @@ private:
     ObjFunction* func = nullptr;
     FunctionType ftype;
 
-    Compiler(FunctionType type = FunctionType::SCRIPT): enclosing(current), ftype(type)
+    Compiler(): ftype(FunctionType::SCRIPT) {}
+
+    Compiler(VM& vm, FunctionType type):
+        enclosing(current), owner(&vm), ftype(type)
     {
         current = this;
-        func = new ObjFunction();
 
+        std::string functionName;
         if(type != FunctionType::SCRIPT && enclosing != nullptr)
-            func->name.assign(enclosing->parser.prev.start,
+            functionName.assign(enclosing->parser.prev.start,
                 static_cast<size_t>(enclosing->parser.prev.len));
+
+        try
+        {
+            func = makeObj<ObjFunction>(vm, std::move(functionName));
+        }
+        catch(...)
+        {
+            current = enclosing;
+            throw;
+        }
 
         Local* local = &locals[localCount++];
         local->depth = 0;
@@ -133,11 +149,15 @@ private:
 public:
     static Compiler comp;
 
-    ~Compiler() = default;
+    ~Compiler()
+    {
+        if(current == this)
+            current = enclosing;
+    }
     Compiler(Compiler& other) = delete;
     Compiler& operator=(Compiler& other) = delete;
 
-    ObjFunction* compile(const std::string& src);
+    ObjFunction* compile(VM& vm, const std::string& src);
 
     void markCompilerRoots(VM& vm);
 

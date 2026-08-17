@@ -1,5 +1,6 @@
 #pragma once
 #include "commons.h"
+#include "memory.h"
 
 struct Obj;
 struct ObjString;
@@ -88,7 +89,9 @@ void printValue(const Value& value);
 class ValueArray
 {
 public:
-    std::vector<Value> values;
+    Vector<Value> values;
+
+    explicit ValueArray(VM* owner = nullptr): values(owner) {}
 
     void write(Value val)
     {

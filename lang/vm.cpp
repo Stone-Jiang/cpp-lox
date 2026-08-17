@@ -1,9 +1,46 @@
 #include "vm.h"
+#include <algorithm>
 
 VM VM::vm{};
 Compiler Compiler::comp{};
 
-VM::VM()
+namespace
+{
+constexpr size_t GC_MIN_THRESHOLD = 1024 * 1024;
+
+size_t saturatingAdd(size_t left, size_t right)
+{
+    const size_t max = std::numeric_limits<size_t>::max();
+    return right > max - left ? max : left + right;
+}
+
+size_t objectExtraBytes(const Obj* object)
+{
+    switch(object->type)
+    {
+    case ObjType::STRING:
+        return saturatingAdd(static_cast<const ObjString*>(object)->chars.capacity(), 1);
+    case ObjType::FUNCTION:
+        return saturatingAdd(static_cast<const ObjFunction*>(object)->name.capacity(), 1);
+    case ObjType::CLASS:
+        return saturatingAdd(static_cast<const ObjClass*>(object)->name.capacity(), 1);
+    default:
+        return 0;
+    }
+}
+
+size_t nextCollectionThreshold(size_t liveBytes)
+{
+    const size_t max = std::numeric_limits<size_t>::max();
+    const size_t grown = liveBytes > max / HEAP_GROW_FACTOR
+        ? max
+        : liveBytes * HEAP_GROW_FACTOR;
+    return std::max(GC_MIN_THRESHOLD, grown);
+}
+}
+
+VM::VM():
+    frames(this), stack(this), globals(this), grayStack(this), strings(this)
 {
     frames.reserve(FRAMES_MAX);
     stack.reserve(STACK_MAX);
@@ -17,25 +54,23 @@ VM::VM()
 
 VM::~VM()
 {
+    gcEnabled = false;
+    resetStack();
     freeObjs();
 }
 
 Result VM::interpret(const string& src)
 {
-    frames.clear();
-    frameCount = 0;
-    stack.clear();
+    gcEnabled = true;
 
-    frames.owner = this;
-    stack.owner = this;
-    grayStack.owner = this;
+    resetStack();
 
-    auto* func = Compiler::comp.compile(src);
+    auto* func = Compiler::comp.compile(*this, src);
     if(func == nullptr)
         return Result::COMPILE_ERROR;
 
     push(Value(func));
-    auto clos = new ObjClosure(func);
+    auto clos = makeObj<ObjClosure>(*this, func);
     pop();
     push(Value(clos));
     call(clos, 0);
@@ -237,7 +272,7 @@ Result VM::run()
         case OpCode::CLOSURE:
         {
             auto func = as_func(read_constant(frame));
-            auto clos = new ObjClosure(func);
+            auto clos = makeObj<ObjClosure>(*this, func);
             push(Value(clos));
 
             for(int i=0; i<clos->upvalueCount; i++)
@@ -276,7 +311,7 @@ Result VM::run()
             break;
         }
         case OpCode::CLASS:
-            push(Value(new ObjClass(read_str(frame))));
+            push(Value(makeObj<ObjClass>(*this, read_str(frame))));
             break;
         case OpCode::GET_PROPERTY:
         {
@@ -346,9 +381,8 @@ Result VM::run()
             auto subclass = as_class(peek(0));
 
             auto& from = as_class(superclass)->methods.m;
-            auto& to = as_class(subclass)->methods.m;
             for(auto it=from.begin(); it!=from.end();++it)
-                to.insert(*it);
+                subclass->methods.set(it->first, it->second);
 
             pop();
             break;
@@ -400,6 +434,15 @@ void VM::runtimeError(std::string_view fmt, Args&&... args) {
             std::cerr << func->name << "()\n";
     }
 
+    resetStack();
+}
+
+void VM::resetStack()
+{
+    closeUpvalues(stack.data());
+    openUpvalues = nullptr;
+    frames.clear();
+    frameCount = 0;
     stack.clear();
 }
 
@@ -416,41 +459,55 @@ void VM::freeObjs()
 void VM::freeObj(Obj* object)
 {
     #ifdef DEBUG_LOG_GC
-    printf("%p free type %d\n", (void*)object, object->type);
+    printf("%p free type %d\n", (void*)object, static_cast<int>(object->type));
     #endif
 
+    VM* owner = object->owner;
+    size_t size = saturatingAdd(sizeof(Obj), objectExtraBytes(object));
     switch(object->type)
     {
     case ObjType::CLASS:
+        size = saturatingAdd(sizeof(ObjClass), objectExtraBytes(object));
         delete static_cast<ObjClass*>(object);
         break;
     case ObjType::INSTANCE:
+        size = sizeof(ObjInstance);
         delete static_cast<ObjInstance*>(object);
         break;
     case ObjType::STRING:
+        size = saturatingAdd(sizeof(ObjString), objectExtraBytes(object));
         delete static_cast<ObjString*>(object);
         break;
     case ObjType::FUNCTION:  
+        size = saturatingAdd(sizeof(ObjFunction), objectExtraBytes(object));
         delete static_cast<ObjFunction*>(object);
         break;
     case ObjType::NATIVE:
+        size = sizeof(ObjNative);
         delete static_cast<ObjNative*>(object);
         break;
     case ObjType::CLOSURE:
+        size = sizeof(ObjClosure);
         delete static_cast<ObjClosure*>(object);
         break;
     case ObjType::UPVALUE:
+        size = sizeof(ObjUpvalue);
         delete static_cast<ObjUpvalue*>(object);
         break;
     case ObjType::BOUND_METHOD:
+        size = sizeof(ObjBoundMethod);
         delete static_cast<ObjBoundMethod*>(object);
         break;
     case ObjType::COMPLEX:
+        size = sizeof(ObjComplex);
         delete static_cast<ObjComplex*>(object);
+        break;
     default:
         delete object;
         break;
     }
+
+    trackAllocation(owner, size, 0);
 }
 
 template<typename Op>
@@ -496,7 +553,8 @@ bool VM::callValue(Value callee, int argCount)
         case ObjType::CLASS:
         {
             auto klass = as_class(callee);
-            stack[stack.size()-static_cast<size_t>(argCount)-1] = Value(new ObjInstance(klass));
+            stack[stack.size()-static_cast<size_t>(argCount)-1] =
+                Value(makeObj<ObjInstance>(*this, klass));
 
             Value init;
             if(klass->methods.get(initStr, init))
@@ -548,7 +606,7 @@ bool VM::call(ObjClosure* clos, int argCount)
 
 void VM::defineNative(const NativeDef& def)
 {
-    push(Value(new ObjNative(def.function, def.arity)));
+    push(Value(makeObj<ObjNative>(*this, def.function, def.arity)));
     globals.set(string(def.name), peek(0));
     pop();
 }
@@ -565,7 +623,7 @@ ObjUpvalue* VM::captureUpvalue(Value* local)
     if(upv!=nullptr && upv->location==local)
         return upv;
 
-    auto created = new ObjUpvalue(local);
+    auto created = makeObj<ObjUpvalue>(*this, local);
     created->next = upv;
 
     if(prev==nullptr)
@@ -596,7 +654,7 @@ bool VM::bindMethod(ObjClass* klass, const string& name)
         return false;
     }
 
-    auto bound = new ObjBoundMethod(peek(0), as_closure(method));
+    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(method));
     pop();
     push(Value(bound));
     return true;
@@ -647,21 +705,41 @@ void VM::defineMethod(const string& name)
 
 void VM::collectGarbage()
 {
+    if(isCollecting)
+        return;
+
+    isCollecting = true;
+
     #ifdef DEBUG_LOG_GC
     printf("-- gc begin\n");
     size_t before = bytesAlloc;
     #endif
 
-    markRoots();
-    traceRefs();
-    removeWhite(strings);
-    sweep();
+    try
+    {
+        markRoots();
+        traceRefs();
+        removeWhite(strings);
+        sweep();
 
-    nextGC = bytesAlloc * HEAP_GROW_FACTOR;
+        nextGC = nextCollectionThreshold(bytesAlloc);
+    }
+    catch(...)
+    {
+        grayStack.clear();
+        for(Obj* object = objects; object != nullptr; object = object->next)
+            object->marked = false;
+        isCollecting = false;
+        throw;
+    }
+
+    isCollecting = false;
 
     #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
-    printf("collected %zu bytes (from %zu to %zu) next at %zu\n", before-bytesAlloc, before, bytesAlloc);
+    const size_t collected = before > bytesAlloc ? before - bytesAlloc : 0;
+    printf("collected %zu bytes (from %zu to %zu) next at %zu\n",
+        collected, before, bytesAlloc, nextGC);
     #endif
 }
 
@@ -675,8 +753,11 @@ void VM::markRoots()
 
     for(auto upval = openUpvalues; upval!=nullptr; upval = upval->next)
         markObject(static_cast<Obj*>(upval));
+
+    markObject(temporaryRoot);
     
     markTable(globals);
+    Compiler::comp.markCompilerRoots(*this);
 }
 
 void VM::markValue(Value value)
@@ -720,7 +801,11 @@ void VM::removeWhite(Table& table)
     {
         Obj* object = it->second.is_obj()? it->second.as_obj(): nullptr;
         if(object!=nullptr && !object->marked)
+        {
+            const size_t bytes = Table::entryKeyBytes(it->first);
             it = table.m.erase(it);
+            table.releaseKeyBytes(bytes);
+        }
         else
             ++it;
     }
@@ -785,6 +870,7 @@ void VM::blackenObject(Obj* object)
         break;
     case ObjType::NATIVE:
     case ObjType::STRING:
+    case ObjType::COMPLEX:
         break;
     }
 }
@@ -825,25 +911,79 @@ void VM::sweep()
 
 // -------
 
-void allocObj(Obj* p)
+void prepareAllocation(VM* owner, size_t oldSize, size_t newSize)
 {
-    #ifdef DEBUG_LOG_GC
-    printf("%p allocate %zu for %d\n", (void*)p, sizeof(*p), p->type);
+    if(owner == nullptr || newSize <= oldSize || !owner->gcEnabled || owner->isCollecting)
+        return;
+
+    const size_t growth = newSize - oldSize;
+    bool shouldCollect = owner->bytesAlloc >= owner->nextGC ||
+        growth > owner->nextGC - owner->bytesAlloc;
+    #ifdef DEBUG_STRESS_GC
+    shouldCollect = true;
     #endif
 
-    p->next = VM::vm.objects;
-    VM::vm.objects = p;
+    if(shouldCollect)
+        owner->collectGarbage();
 }
 
-ObjString* copyString(std::string_view chars)
+void trackAllocation(VM* owner, size_t oldSize, size_t newSize)
+{
+    if(owner == nullptr || oldSize == newSize)
+        return;
+
+    if(newSize > oldSize)
+    {
+        owner->bytesAlloc = saturatingAdd(owner->bytesAlloc, newSize - oldSize);
+    }
+    else
+    {
+        const size_t released = oldSize - newSize;
+        owner->bytesAlloc = released > owner->bytesAlloc
+            ? 0
+            : owner->bytesAlloc - released;
+    }
+}
+
+void prepareObjAllocation(VM* owner, size_t size)
+{
+    prepareAllocation(owner, 0, size);
+}
+
+void allocObj(VM* owner, Obj* p, size_t size)
+{
+    const size_t allocationSize = saturatingAdd(size, objectExtraBytes(p));
+
+    #ifdef DEBUG_LOG_GC
+    printf("%p allocate %zu for %d\n",
+        (void*)p, allocationSize, static_cast<int>(p->type));
+    #endif
+
+    p->next = owner->objects;
+    owner->objects = p;
+    trackAllocation(owner, 0, allocationSize);
+}
+
+ObjString* copyString(VM& owner, std::string_view chars)
 {
     std::string key(chars);
-    auto interned = VM::vm.strings.find(key);
+    auto interned = owner.strings.find(key);
     if(interned.has_value())
         return static_cast<ObjString*>(interned->as_obj());
 
-    auto* string = new ObjString(std::move(key));
-    VM::vm.strings.set(string->str(), Value(string));
+    auto* string = makeObj<ObjString>(owner, std::move(key));
+    Obj* previousRoot = owner.temporaryRoot;
+    owner.temporaryRoot = string;
+    try
+    {
+        owner.strings.set(string->str(), Value(string));
+    }
+    catch(...)
+    {
+        owner.temporaryRoot = previousRoot;
+        throw;
+    }
+    owner.temporaryRoot = previousRoot;
     return string;
 }
 

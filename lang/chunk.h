@@ -25,11 +25,11 @@ class Chunk
     friend class VM;
     friend class Compiler;
 private: 
-    std::vector<u8> code;
-    std::vector<int> lines;
+    Vector<u8> code;
+    Vector<int> lines;
     ValueArray constants;
 public:
-    Chunk() = default;
+    explicit Chunk(VM* owner = nullptr): code(owner), lines(owner), constants(owner) {}
     ~Chunk() = default;
 
     void write(u8 byte, int line);

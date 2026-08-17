@@ -41,6 +41,7 @@ public:
 
 int main(int argc, char* argv[])
 {
+    std::cout<<sizeof(Value)<<"\n";
     if(argc==2)
         return Runtime::process(argv[1]);
 

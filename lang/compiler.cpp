@@ -1,12 +1,27 @@
 #include "compiler.h"
 #include "vm.h"
 
-ObjFunction* Compiler::compile(const string& src)
+ObjFunction* Compiler::compile(VM& vm, const string& src)
 {
+    enclosing = nullptr;
+    owner = &vm;
+    ftype = FunctionType::SCRIPT;
+    func = nullptr;
+    localCount = 0;
+    scopeDepth = 0;
+    currentClass = nullptr;
+    currentLoop = nullptr;
     current = this;
+    func = makeObj<ObjFunction>(vm);
+
+    Local* local = &locals[localCount++];
+    local->depth = 0;
+    local->isCapt = false;
+    local->name.start = "this";
+    local->name.len = 4;
+
     parser = Parser{};
     this->chunk = &func->chunk;
-    chunk->clear();
     scanner = std::make_unique<Scanner>(src);
     
     advance();
@@ -135,7 +150,20 @@ void Compiler::emitReturn()
 
 u8 Compiler::makeConstant(Value value)
 {
-    int constant = currentChunk()->addConst(value);
+    owner->push(value);
+
+    int constant;
+    try
+    {
+        constant = currentChunk()->addConst(value);
+    }
+    catch(...)
+    {
+        owner->pop();
+        throw;
+    }
+    owner->pop();
+
     if(constant < 0 || constant > UINT8_MAX)
     {
         error("Too many constants in one chunk.");
@@ -313,7 +341,8 @@ u8 Compiler::parseVar(const string& msg)
 
 u8 Compiler::identConstant(Token& name)
 {
-    return makeConstant(Value(copyString(std::string_view(name.start, name.len))));
+    return makeConstant(Value(copyString(*owner,
+        std::string_view(name.start, name.len))));
 }
 
 void Compiler::literal(bool)
@@ -333,7 +362,7 @@ void Compiler::literal(bool)
 
 void Compiler::stringy(bool) 
 {
-    emitConstant(Value(copyString(string(
+    emitConstant(Value(copyString(*owner, string(
         parser.prev.start + 1,
         static_cast<size_t>(parser.prev.len - 2)))));
 }
@@ -401,7 +430,7 @@ void Compiler::block()
 
 void Compiler::function_(FunctionType type)
 {
-    Compiler compiler(type);
+    Compiler compiler(*owner, type);
     beginScope();
     consume(TokenType::LEFT_PAREN, "Expect '(' after function name.");
 
@@ -541,7 +570,7 @@ void Compiler::forStmt()
         patchJump(bodyJump);
     }
 
-    LoopCompiler loop;
+    LoopCompiler loop(owner);
     loop.enclosing = current->currentLoop;
     loop.scopeDepth = current->scopeDepth;
     loop.continueTarget = loopStart;
@@ -616,7 +645,7 @@ void Compiler::whileStmt()
     int exitJump = emitJump(OpCode::JUMP_IF_FALSE);
     emit(OpCode::POP);
 
-    LoopCompiler loop;
+    LoopCompiler loop(owner);
     loop.enclosing = current->currentLoop;
     loop.scopeDepth = current->scopeDepth;
     loop.continueTarget = loopStart;

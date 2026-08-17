@@ -23,7 +23,15 @@ struct CallFrame
 class VM
 {
     friend class Compiler;
-    friend void allocObj(Obj*);
+    friend void allocObj(VM*, Obj*, size_t);
+    friend void prepareAllocation(VM*, size_t, size_t);
+    friend void trackAllocation(VM*, size_t, size_t);
+    friend ObjString* copyString(VM&, std::string_view);
+
+    size_t bytesAlloc = 0;
+    size_t nextGC = 1024*1024;
+    bool gcEnabled = false;
+    bool isCollecting = false;
 
     Vector<CallFrame> frames;
     int frameCount = 0;
@@ -32,13 +40,11 @@ class VM
 
     Obj* objects = nullptr;
     ObjUpvalue* openUpvalues = nullptr;
+    Obj* temporaryRoot = nullptr;
 
     Table globals;
 
     Vector<Obj*> grayStack;
-
-    size_t bytesAlloc = 0;
-    size_t nextGC = 1024*1024;
 
     VM();
     ~VM();
@@ -97,12 +103,17 @@ private:
     template<typename... Args>
     void runtimeError(std::string_view fmt, Args&&... args);
 
+    void resetStack();
+
     void concat()
     {
-        auto* b = as_str(pop());
-        auto* a = as_str(pop());
+        auto* b = as_str(peek(0));
+        auto* a = as_str(peek(1));
+        auto* result = copyString(*this, a->str() + b->str());
 
-        push(Value(copyString(a->str() + b->str())));
+        pop();
+        pop();
+        push(Value(result));
     }
 
     void freeObjs();
@@ -136,6 +147,5 @@ private:
     void sweep();
 };
 
-void allocObj(Obj* p);
-ObjString* copyString(std::string_view chars);
+ObjString* copyString(VM& owner, std::string_view chars);
 

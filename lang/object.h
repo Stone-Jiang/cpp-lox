@@ -5,8 +5,10 @@
 #include "table.h"
 #include "native.h"
 #include <complex>
+#include <utility>
 
-void allocObj(Obj* p);
+void prepareObjAllocation(VM* owner, size_t size);
+void allocObj(VM* owner, Obj* object, size_t size);
 
 enum class ObjType
 {
@@ -15,26 +17,22 @@ enum class ObjType
 
 struct Obj
 {
+    VM* owner = nullptr;
     ObjType type;
     Obj* next = nullptr;
     bool marked = false;
 
-    Obj(ObjType type): type(type) 
-    {
-        allocObj(this);
-    }
+    Obj(VM* owner, ObjType type): owner(owner), type(type) {}
 
-    Obj(): type(ObjType::NOT) 
-    {
-        allocObj(this);
-    }
+    Obj(): type(ObjType::NOT) {}
 };
 
 struct ObjString: Obj
 {
     std::string chars;
 
-    ObjString(std::string chars): Obj(ObjType::STRING), chars(std::move(chars)) {}
+    ObjString(VM* owner, std::string chars):
+        Obj(owner, ObjType::STRING), chars(std::move(chars)) {}
 
     const std::string& str() const
     { 
@@ -46,8 +44,8 @@ struct ObjComplex: Obj
 {
     std::complex<double> c;
 
-    ObjComplex(): Obj(ObjType::COMPLEX), c(0) {}
-    ObjComplex(double r, double i): Obj(ObjType::COMPLEX), c(r, i) {}
+    ObjComplex(VM* owner): Obj(owner, ObjType::COMPLEX), c(0) {}
+    ObjComplex(VM* owner, double r, double i): Obj(owner, ObjType::COMPLEX), c(r, i) {}
 };
 
 struct ObjFunction: Obj
@@ -57,7 +55,8 @@ struct ObjFunction: Obj
     Chunk chunk;
     std::string name = "";
 
-    ObjFunction(): Obj(ObjType::FUNCTION) {}
+    ObjFunction(VM* owner, std::string functionName = {}):
+        Obj(owner, ObjType::FUNCTION), chunk(owner), name(std::move(functionName)) {}
 };
 
 struct ObjNative: Obj
@@ -65,7 +64,8 @@ struct ObjNative: Obj
     NativeFn func;
     int arity;
 
-    ObjNative(NativeFn nf, int a): Obj(ObjType::NATIVE), func(nf), arity(a) {}
+    ObjNative(VM* owner, NativeFn nf, int a):
+        Obj(owner, ObjType::NATIVE), func(nf), arity(a) {}
 };
 
 struct ObjUpvalue: Obj
@@ -74,16 +74,18 @@ struct ObjUpvalue: Obj
     Value closed;
     ObjUpvalue* next = nullptr;
 
-    ObjUpvalue(Value* slot): Obj(ObjType::UPVALUE), location(slot), closed(Value()) {}
+    ObjUpvalue(VM* owner, Value* slot):
+        Obj(owner, ObjType::UPVALUE), location(slot), closed(Value()) {}
 };
 
 struct ObjClosure: Obj
 {
     ObjFunction* func = nullptr;
-    std::vector<ObjUpvalue*> upvalues;
+    Vector<ObjUpvalue*> upvalues;
     int upvalueCount;
 
-    ObjClosure(ObjFunction* f): Obj(ObjType::CLOSURE)
+    ObjClosure(VM* owner, ObjFunction* f):
+        Obj(owner, ObjType::CLOSURE), upvalues(owner)
     {
         for(int i=0; i<f->upvalCount; i++)
             upvalues.push_back(nullptr);
@@ -98,7 +100,8 @@ struct ObjClass: Obj
     std::string name;
     Table methods;
 
-    ObjClass(std::string n): Obj(ObjType::CLASS), name(n) {}
+    ObjClass(VM* owner, std::string n):
+        Obj(owner, ObjType::CLASS), name(std::move(n)), methods(owner) {}
 };
 
 struct ObjInstance: Obj
@@ -106,7 +109,8 @@ struct ObjInstance: Obj
     ObjClass* klass = nullptr;
     Table fields;
 
-    ObjInstance(ObjClass* klass): Obj(ObjType::INSTANCE), klass(klass) {}
+    ObjInstance(VM* owner, ObjClass* klass):
+        Obj(owner, ObjType::INSTANCE), klass(klass), fields(owner) {}
 };
 
 struct ObjBoundMethod: Obj
@@ -114,7 +118,8 @@ struct ObjBoundMethod: Obj
     Value receiver;
     ObjClosure* method = nullptr;
 
-    ObjBoundMethod(Value val, ObjClosure* c): Obj(ObjType::BOUND_METHOD), receiver(val), method(c) {} 
+    ObjBoundMethod(VM* owner, Value val, ObjClosure* c):
+        Obj(owner, ObjType::BOUND_METHOD), receiver(val), method(c) {}
 };
 
 std::optional<ObjType> objType(const Value& value);
@@ -146,9 +151,20 @@ bool is(const Value& value);
 template <Objective T>
 T* as(const Value& value);
 
+template <Objective T, typename... Args>
+T* makeObj(VM& owner, Args&&... args)
+{
+    constexpr size_t size = sizeof(T);
+    prepareObjAllocation(&owner, size);
+
+    T* object = new T(&owner, std::forward<Args>(args)...);
+    allocObj(&owner, object, size);
+    return object;
+}
+
 void printFunction(const ObjFunction* func);
 void printObject(const Value& value);
 void printValue(const Value& value);
 bool objectsEqual(Obj* left, Obj* right);
 
-ObjString* copyString(std::string_view chars);
+ObjString* copyString(VM& owner, std::string_view chars);

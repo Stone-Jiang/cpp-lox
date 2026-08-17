@@ -9,6 +9,10 @@
 #include <type_traits>
 #include <utility>
 
+class VM;
+void prepareAllocation(VM* owner, size_t oldSize, size_t newSize);
+void trackAllocation(VM* owner, size_t oldSize, size_t newSize);
+
 template <typename T>
 class Vector
 {
@@ -18,6 +22,12 @@ private:
     T* arr = nullptr;
     size_t cap = 0, sz = 0;
     VM* owner = nullptr;
+
+    void reportCapacityChange(size_t oldCap, size_t newCap)
+    {
+        if(owner != nullptr)
+            trackAllocation(owner, oldCap * sizeof(T), newCap * sizeof(T));
+    }
 
     size_t nextCapacity() const
     {
@@ -42,17 +52,23 @@ public:
     }
 
     Vector() = default;
+    explicit Vector(VM* vm): owner(vm) {}
 
     ~Vector()
     {
+        const size_t oldCap = cap;
         clear();
         ::operator delete(arr);
+        arr = nullptr;
+        cap = 0;
+        reportCapacityChange(oldCap, 0);
     }
 
-    Vector(const Vector& other)
+    Vector(const Vector& other): owner(other.owner)
     {
         if(other.sz>0)
         {
+            prepareAllocation(owner, 0, sizeof(T) * other.sz);
             void* raw = ::operator new(sizeof(T)*other.sz);
             arr = static_cast<T*>(raw);
             cap = other.sz;
@@ -70,14 +86,18 @@ public:
                 cap = 0;
                 throw;
             }
+
+            reportCapacityChange(0, cap);
         }
     }
 
-    Vector(Vector&& other) noexcept: arr(other.arr), cap(other.cap), sz(other.sz)
+    Vector(Vector&& other) noexcept:
+        arr(other.arr), cap(other.cap), sz(other.sz), owner(other.owner)
     {
         other.arr = nullptr;
         other.sz = 0;
         other.cap = 0;
+        other.owner = nullptr;
     }
 
     Vector& operator=(const Vector& other)
@@ -90,21 +110,13 @@ public:
         return *this;
     }
 
-    Vector& operator=(Vector&& other) noexcept
+    Vector& operator=(Vector&& other)
     {
         if(this==&other)
             return *this;
 
-        clear();
-        ::operator delete(arr);
-        arr = other.arr;
-        sz = other.sz;
-        cap = other.cap;
-
-        other.arr = nullptr;
-        other.sz = 0;
-        other.cap = 0;
-
+        Vector temp(std::move(other));
+        swap(temp);
         return *this;
     }
 
@@ -175,10 +187,12 @@ public:
     {
         if(sz == 0)
         {
+            const size_t oldCap = cap;
             clear();
             ::operator delete(arr);
             arr = nullptr;
             cap = 0;
+            reportCapacityChange(oldCap, 0);
             return;
         }
 
@@ -204,9 +218,11 @@ public:
         for(size_t i = 0; i < sz; ++i)
             arr[i].~T();
 
+        const size_t oldCap = cap;
         ::operator delete(arr);
         arr = newdata;
         cap = sz;
+        reportCapacityChange(oldCap, cap);
     }
 
     T& get(size_t index)
@@ -291,11 +307,20 @@ public:
         return os;
     }
 
-    void swap(Vector& other) noexcept
+    void swap(Vector& other)
     {
+        const size_t oldCap = cap;
+        const size_t otherOldCap = other.cap;
+
         std::swap(arr, other.arr);
         std::swap(sz, other.sz);
         std::swap(cap, other.cap);
+
+        if(owner != other.owner)
+        {
+            reportCapacityChange(oldCap, cap);
+            other.reportCapacityChange(otherOldCap, other.cap);
+        }
     }
 
     void reserve(size_t newcap);
@@ -475,8 +500,6 @@ public:
     }
 };
 
-#include "vm.h"
-
 template <typename T>
 void Vector<T>::reserve(size_t newcap)
 {
@@ -485,6 +508,7 @@ void Vector<T>::reserve(size_t newcap)
     if(newcap <= cap)
         return;
 
+    prepareAllocation(owner, cap * sizeof(T), newcap * sizeof(T));
     void* raw = ::operator new(sizeof(T) * newcap);
     T* newdata = static_cast<T*>(raw);
     size_t i = 0;
@@ -504,7 +528,9 @@ void Vector<T>::reserve(size_t newcap)
     for(size_t i = 0; i < sz; ++i)
         arr[i].~T();
 
+    const size_t oldCap = cap;
     ::operator delete(arr);
     arr = newdata;
     cap = newcap;
+    reportCapacityChange(oldCap, cap);
 }

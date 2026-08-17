@@ -153,8 +153,6 @@ void printFunction(const ObjFunction* func)
         std::printf("<fn %s>", func->name.c_str());
 }
 
-ObjString* copyString(std::string_view chars);
-
 void printObject(const Value& value)
 {
     if(!value.is_obj() || value.as_obj() == nullptr)
