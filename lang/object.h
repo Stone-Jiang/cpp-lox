@@ -29,10 +29,12 @@ struct Obj
 
 struct ObjString: Obj
 {
-    std::string chars;
+    const std::string chars;
+    const size_t hash;
 
     ObjString(VM* owner, std::string chars):
-        Obj(owner, ObjType::STRING), chars(std::move(chars)) {}
+        Obj(owner, ObjType::STRING), chars(std::move(chars)),
+        hash(std::hash<std::string_view>{}(this->chars)) {}
 
     const std::string& str() const
     { 
@@ -53,10 +55,10 @@ struct ObjFunction: Obj
     int arity = 0;
     int upvalCount = 0;
     Chunk chunk;
-    std::string name = "";
+    ObjString* name = nullptr;
 
-    ObjFunction(VM* owner, std::string functionName = {}):
-        Obj(owner, ObjType::FUNCTION), chunk(owner), name(std::move(functionName)) {}
+    ObjFunction(VM* owner, ObjString* functionName = nullptr):
+        Obj(owner, ObjType::FUNCTION), chunk(owner), name(functionName) {}
 };
 
 struct ObjNative: Obj
@@ -97,11 +99,11 @@ struct ObjClosure: Obj
 
 struct ObjClass: Obj
 {
-    std::string name;
+    ObjString* name = nullptr;
     Table methods;
 
-    ObjClass(VM* owner, std::string n):
-        Obj(owner, ObjType::CLASS), name(std::move(n)), methods(owner) {}
+    ObjClass(VM* owner, ObjString* name):
+        Obj(owner, ObjType::CLASS), name(name), methods(owner) {}
 };
 
 struct ObjInstance: Obj

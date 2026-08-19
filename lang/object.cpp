@@ -147,10 +147,10 @@ template ObjBoundMethod* as<ObjBoundMethod>(const Value&);
 
 void printFunction(const ObjFunction* func)
 {
-    if(func->name.empty())
+    if(func->name == nullptr)
         std::printf("<script>");
     else
-        std::printf("<fn %s>", func->name.c_str());
+        std::printf("<fn %s>", func->name->str().c_str());
 }
 
 void printObject(const Value& value)
@@ -176,10 +176,10 @@ void printObject(const Value& value)
         printf("upvalue");
         break;
     case ObjType::CLASS:
-        printf("%s", as_class(value)->name.c_str());
+        printf("%s", as_class(value)->name->str().c_str());
         break;
     case ObjType::INSTANCE:
-        printf("%s instance", as_instance(value)->klass->name.c_str());
+        printf("%s instance", as_instance(value)->klass->name->str().c_str());
         break;
     case ObjType::BOUND_METHOD:
         printFunction(as_bound_meth(value)->method->func);
@@ -210,8 +210,5 @@ bool objectsEqual(Obj* left, Obj* right)
         return true;
     if(left == nullptr || right == nullptr || left->type != right->type)
         return false;
-    if(left->type == ObjType::STRING)
-        return static_cast<ObjString*>(left)->str() == static_cast<ObjString*>(right)->str();
-
     return false;
 }

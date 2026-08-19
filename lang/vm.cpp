@@ -6,8 +6,6 @@ Compiler Compiler::comp{};
 
 namespace
 {
-constexpr size_t GC_MIN_THRESHOLD = 1024 * 1024;
-
 size_t saturatingAdd(size_t left, size_t right)
 {
     const size_t max = std::numeric_limits<size_t>::max();
@@ -20,10 +18,6 @@ size_t objectExtraBytes(const Obj* object)
     {
     case ObjType::STRING:
         return saturatingAdd(static_cast<const ObjString*>(object)->chars.capacity(), 1);
-    case ObjType::FUNCTION:
-        return saturatingAdd(static_cast<const ObjFunction*>(object)->name.capacity(), 1);
-    case ObjType::CLASS:
-        return saturatingAdd(static_cast<const ObjClass*>(object)->name.capacity(), 1);
     default:
         return 0;
     }
@@ -40,13 +34,15 @@ size_t nextCollectionThreshold(size_t liveBytes)
 }
 
 VM::VM():
-    frames(this), stack(this), globals(this), grayStack(this), strings(this)
+    frames(this), stack(this), globals(this), strings(this), grayStack(this)
 {
     frames.reserve(FRAMES_MAX);
     stack.reserve(STACK_MAX);
 
     const auto natives = nativeDefinitions();
     globals.reserve(natives.size());
+
+    initStr = copyString(*this, "init");
 
     for(const auto& nat: natives)
         defineNative(nat);
@@ -201,18 +197,18 @@ Result VM::run()
         }
         case OpCode::DEFINE_GLOBAL:
         {
-            string name = read_str(frame);
+            ObjString* name = read_str(frame);
             globals.set(name, peek(0));
             pop();
             break;
         }
         case OpCode::GET_GLOBAL:
         {
-            const string& name = read_str(frame);
+            ObjString* name = read_str(frame);
             Value value;
             if(!globals.get(name, value))
             {
-                runtimeError("Undefined variable '{}'.", name);
+                runtimeError("Undefined variable '{}'.", name->str());
                 return Result::RUNTIME_ERROR;
             }
 
@@ -221,11 +217,11 @@ Result VM::run()
         }
         case OpCode::SET_GLOBAL:
         {
-            string name = read_str(frame);
+            ObjString* name = read_str(frame);
             if(globals.set(name, peek(0)))
             {
                 globals.del(name);
-                runtimeError("Undefined variable '{}'.", name);
+                runtimeError("Undefined variable '{}'.", name->str());
                 return Result::RUNTIME_ERROR;
             }
             break;
@@ -360,7 +356,7 @@ Result VM::run()
         
         case OpCode::INVOKE:
         {
-            string meth = read_str(frame);
+            ObjString* meth = read_str(frame);
             int argCount = read_byte(frame);
             if(!invoke(meth, argCount))
                 return Result::RUNTIME_ERROR;
@@ -428,10 +424,10 @@ void VM::runtimeError(std::string_view fmt, Args&&... args) {
         auto func = frame->clos->func;
         size_t instruction = frame->ip - func->chunk.code.data() - 1;
         std::cerr << "[line " << func->chunk.lines[instruction] << "] in ";
-        if(func->name.empty())
+        if(func->name == nullptr)
             std::cerr << "script\n";
         else
-            std::cerr << func->name << "()\n";
+            std::cerr << func->name->str() << "()\n";
     }
 
     resetStack();
@@ -606,8 +602,26 @@ bool VM::call(ObjClosure* clos, int argCount)
 
 void VM::defineNative(const NativeDef& def)
 {
-    push(Value(makeObj<ObjNative>(*this, def.function, def.arity)));
-    globals.set(string(def.name), peek(0));
+    ObjString* name = copyString(*this, def.name);
+    push(Value(name));
+
+    bool nativeRooted = false;
+    try
+    {
+        ObjNative* native = makeObj<ObjNative>(*this, def.function, def.arity);
+        push(Value(native));
+        nativeRooted = true;
+        globals.set(name, peek(0));
+    }
+    catch(...)
+    {
+        if(nativeRooted)
+            pop();
+        pop();
+        throw;
+    }
+
+    pop();
     pop();
 }
 
@@ -645,12 +659,12 @@ void VM::closeUpvalues(Value* last)
     }
 }
 
-bool VM::bindMethod(ObjClass* klass, const string& name)
+bool VM::bindMethod(ObjClass* klass, ObjString* name)
 {
     Value method;
     if(!klass->methods.get(name, method))
     {
-        runtimeError("Undefined property '{}'.", name);
+        runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
 
@@ -660,7 +674,7 @@ bool VM::bindMethod(ObjClass* klass, const string& name)
     return true;
 }
 
-bool VM::invoke(const string& name, int argCount)
+bool VM::invoke(ObjString* name, int argCount)
 {
     Value receiver = peek(argCount);
 
@@ -682,18 +696,18 @@ bool VM::invoke(const string& name, int argCount)
     return invokeClass(instance->klass, name, argCount);
 }
 
-bool VM::invokeClass(ObjClass* klass, const string& name, int argCount)
+bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
 {
     Value meth;
     if(!klass->methods.get(name, meth))
     {
-        runtimeError("Undefined property '{}'.", name);
+        runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
     return call(as_closure(meth), argCount);
 }
 
-void VM::defineMethod(const string& name)
+void VM::defineMethod(ObjString* name)
 {
     Value method = peek(0);
     auto klass = as_class(peek(1));
@@ -755,6 +769,7 @@ void VM::markRoots()
         markObject(static_cast<Obj*>(upval));
 
     markObject(temporaryRoot);
+    markObject(initStr);
     
     markTable(globals);
     Compiler::comp.markCompilerRoots(*this);
@@ -790,22 +805,17 @@ void VM::markTable(Table& table)
 {
     for(auto it=table.m.begin(); it!=table.m.end(); ++it)
     {
-        // markObject(it->first);
+        markObject(it->first);
         markValue(it->second);
     }
 }
 
-void VM::removeWhite(Table& table)
+void VM::removeWhite(StringPool& pool)
 {
-    for(auto it=table.m.begin(); it!=table.m.end();)
+    for(auto it=pool.m.begin(); it!=pool.m.end();)
     {
-        Obj* object = it->second.is_obj()? it->second.as_obj(): nullptr;
-        if(object!=nullptr && !object->marked)
-        {
-            const size_t bytes = Table::entryKeyBytes(it->first);
-            it = table.m.erase(it);
-            table.releaseKeyBytes(bytes);
-        }
+        if(!(*it)->marked)
+            it = pool.m.erase(it);
         else
             ++it;
     }
@@ -841,6 +851,7 @@ void VM::blackenObject(Obj* object)
     case ObjType::CLASS:
     {
         auto klass = static_cast<ObjClass*>(object);
+        markObject(klass->name);
         markTable(klass->methods);
         break;
     }
@@ -862,6 +873,7 @@ void VM::blackenObject(Obj* object)
     case ObjType::FUNCTION:
     {
         auto func = static_cast<ObjFunction*>(object);
+        markObject(func->name);
         markArray(func->chunk.constants);
         break;
     }
@@ -966,17 +978,17 @@ void allocObj(VM* owner, Obj* p, size_t size)
 
 ObjString* copyString(VM& owner, std::string_view chars)
 {
-    std::string key(chars);
-    auto interned = owner.strings.find(key);
-    if(interned.has_value())
-        return static_cast<ObjString*>(interned->as_obj());
+    if(ObjString* interned = owner.strings.find(chars); interned != nullptr)
+        return interned;
 
-    auto* string = makeObj<ObjString>(owner, std::move(key));
+    prepareAllocation(&owner, 0,
+        saturatingAdd(sizeof(ObjString), saturatingAdd(chars.size(), 1)));
+    auto* string = makeObj<ObjString>(owner, std::string(chars));
     Obj* previousRoot = owner.temporaryRoot;
     owner.temporaryRoot = string;
     try
     {
-        owner.strings.set(string->str(), Value(string));
+        owner.strings.insert(string);
     }
     catch(...)
     {

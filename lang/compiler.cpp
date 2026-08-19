@@ -1,6 +1,54 @@
 #include "compiler.h"
 #include "vm.h"
 
+Compiler::Compiler(VM& vm, FunctionType type):
+    enclosing(current), owner(&vm), ftype(type)
+{
+    current = this;
+
+    ObjString* functionName = nullptr;
+    bool nameRooted = false;
+
+    try
+    {
+        if(type != FunctionType::SCRIPT && enclosing != nullptr)
+        {
+            functionName = copyString(vm, std::string_view(
+                enclosing->parser.prev.start,
+                static_cast<size_t>(enclosing->parser.prev.len)));
+            vm.push(Value(functionName));
+            nameRooted = true;
+        }
+
+        func = makeObj<ObjFunction>(vm, functionName);
+    }
+    catch(...)
+    {
+        if(nameRooted)
+            vm.pop();
+        current = enclosing;
+        throw;
+    }
+
+    if(nameRooted)
+        vm.pop();
+
+    Local* local = &locals[localCount++];
+    local->depth = 0;
+    local->isCapt = false;
+
+    if(type != FunctionType::FUNCTION)
+    {
+        local->name.start = "this";
+        local->name.len = 4;
+    }
+    else
+    {
+        local->name.start = "";
+        local->name.len = 0;
+    }
+}
+
 ObjFunction* Compiler::compile(VM& vm, const string& src)
 {
     enclosing = nullptr;
@@ -115,7 +163,8 @@ ObjFunction* Compiler::end()
     
     #ifdef DEBUG_PRINT_CODE
     if(!parser.hadError)
-        Debug::disassembleChunk(*currentChunk(), !func->name.empty()? func->name: "<script>");
+        Debug::disassembleChunk(*currentChunk(),
+            func->name != nullptr ? func->name->str() : "<script>");
     #endif
 
     current = current->enclosing;
@@ -362,7 +411,7 @@ void Compiler::literal(bool)
 
 void Compiler::stringy(bool) 
 {
-    emitConstant(Value(copyString(*owner, string(
+    emitConstant(Value(copyString(*owner, std::string_view(
         parser.prev.start + 1,
         static_cast<size_t>(parser.prev.len - 2)))));
 }

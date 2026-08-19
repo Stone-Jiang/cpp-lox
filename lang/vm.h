@@ -43,6 +43,7 @@ class VM
     Obj* temporaryRoot = nullptr;
 
     Table globals;
+    StringPool strings;
 
     Vector<Obj*> grayStack;
 
@@ -52,8 +53,7 @@ class VM
     VM& operator=(const VM&) = delete;
 
 public:
-    Table strings;
-    string initStr = "init";
+    ObjString* initStr = nullptr;
 
     static VM vm;
     
@@ -77,9 +77,9 @@ private:
         return frame->clos->func->chunk.constants.values[read_byte(frame)];
     }
 
-    inline const std::string& read_str(CallFrame* frame)
+    inline ObjString* read_str(CallFrame* frame)
     {
-        return as_string(read_constant(frame));
+        return static_cast<ObjString*>(read_constant(frame).as_obj());
     }
 
     template<typename Op>
@@ -124,10 +124,10 @@ private:
     void defineNative(const NativeDef& def);
     ObjUpvalue* captureUpvalue(Value* local);
     void closeUpvalues(Value* last);
-    bool bindMethod(ObjClass* klass, const string& name);
-    bool invoke(const string& name, int argCount);
-    bool invokeClass(ObjClass* klass, const string& name, int argCount);
-    void defineMethod(const string& name);
+    bool bindMethod(ObjClass* klass, ObjString* name);
+    bool invoke(ObjString* name, int argCount);
+    bool invokeClass(ObjClass* klass, ObjString* name, int argCount);
+    void defineMethod(ObjString* name);
 
     // GC
     void collectGarbage();
@@ -137,7 +137,7 @@ private:
     void markObject(Obj* object);
 
     void markTable(Table& table);
-    void removeWhite(Table& table);
+    void removeWhite(StringPool& pool);
 
     void traceRefs();
 

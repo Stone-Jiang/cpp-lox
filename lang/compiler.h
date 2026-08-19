@@ -110,41 +110,7 @@ private:
 
     Compiler(): ftype(FunctionType::SCRIPT) {}
 
-    Compiler(VM& vm, FunctionType type):
-        enclosing(current), owner(&vm), ftype(type)
-    {
-        current = this;
-
-        std::string functionName;
-        if(type != FunctionType::SCRIPT && enclosing != nullptr)
-            functionName.assign(enclosing->parser.prev.start,
-                static_cast<size_t>(enclosing->parser.prev.len));
-
-        try
-        {
-            func = makeObj<ObjFunction>(vm, std::move(functionName));
-        }
-        catch(...)
-        {
-            current = enclosing;
-            throw;
-        }
-
-        Local* local = &locals[localCount++];
-        local->depth = 0;
-        local->isCapt = false;
-        
-        if(type!=FunctionType::FUNCTION)
-        {
-            local->name.start = "this";
-            local->name.len = 4;
-        }
-        else
-        {
-            local->name.start = "";
-            local->name.len = 0;
-        }
-    }
+    Compiler(VM& vm, FunctionType type);
 
 public:
     static Compiler comp;
