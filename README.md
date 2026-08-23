@@ -2,9 +2,9 @@
 
 
 ## Key Features
-1. Components are organized in classes with little abstraction cost, i.e. no `virtual` pointers, no dynamic dispatch, etc, so .
+1. Components are organized in classes with little abstraction cost, i.e. no `virtual` pointers, no dynamic dispatch, etc, so it's almost as fast as the original design.
 2. The C++ version improved ownership problems and visibility issues.
-3. This project uses modern C++ features to better organize code, such as 
+3. Replaced macros for constants and helper functions with `constexpr` or inline functions, which is almost as efficient.
 4. Instances of `VM`, `Compiler`, and `Scanner` are singleton but not global variables, which leaves future possibilities of extensions.
 5. The original hash table design is replaced with `std::unordered_map<>` if `BETTER_HASH_TABLE` macro is off and `robinhood::flat_table` if `BETTER_HASH_TABLE` macro is on.
 6. Extended repl and small commands: `-r` to run a file.
