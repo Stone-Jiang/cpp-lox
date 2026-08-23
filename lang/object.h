@@ -143,15 +143,11 @@ bool is_instance(const Value& value);
 ObjInstance* as_instance(const Value& value);
 bool is_bound_meth(const Value& value);
 ObjBoundMethod* as_bound_meth(const Value& value);
+bool is_complex(const Value& value);
+ObjComplex* as_complex(const Value& value);
 
 template <class T>
 concept Objective = std::is_base_of_v<Obj, T>;
-
-template <Objective T>
-bool is(const Value& value);
-
-template <Objective T>
-T* as(const Value& value);
 
 template <Objective T, typename... Args>
 T* makeObj(VM& owner, Args&&... args)

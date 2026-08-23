@@ -10,11 +10,11 @@ enum class TokenType
     EQUAL, EQUAL_EQUAL,
     GREATER, GREATER_EQUAL,
     LESS, LESS_EQUAL,
-    IDENTIFIER, STRING, NUMBER,
+    IDENTIFIER, STRING, NUMBER, IMAGINARY,
     AND, CLASS, ELSE, FALSE,
     FOR, FUN, IF, NIL, OR,
     PRINT, RETURN, SUPER, THIS,
-    TRUE, VAR, WHILE,
+    TRUE, VAR, WHILE, STATIC,
     BREAK, CONTINUE,
     TEOF, ERROR, NONE
 };
@@ -33,6 +33,7 @@ static const std::unordered_map<string, TokenType> keywords =
     {"print",  TokenType::PRINT},
     {"return", TokenType::RETURN},
     {"super",  TokenType::SUPER},
+    {"static", TokenType::STATIC},
     {"this",   TokenType::THIS},
     {"true",   TokenType::TRUE},
     {"var",    TokenType::VAR},
@@ -66,18 +67,15 @@ public:
 private:
     Token tok(TokenType type);
     Token error(const string& msg);
-    bool isAtEnd();
 
+    bool isAtEnd();
     char advance();
     char peek();
     char peekNext();
-
     bool match(char exp);
-
     void skip();
 
     TokenType identifierType() const;
-
     Token identifier();
     Token number();
     Token stringy();

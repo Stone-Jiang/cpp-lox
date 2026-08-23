@@ -149,6 +149,7 @@ private:
     u8 identConstant(Token& name);
     
     void number(bool);
+    void imaginary(bool);
     void binary(bool);
     void grouping(bool);
     void unary(bool);

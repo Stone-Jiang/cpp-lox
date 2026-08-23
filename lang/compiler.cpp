@@ -188,6 +188,13 @@ void Compiler::number(bool)
     emitConstant(Value(val));
 }
 
+void Compiler::imaginary(bool)
+{
+    const double imaginary = strtod(parser.prev.start, nullptr);
+    auto* value = makeObj<ObjComplex>(*owner, 0.0, imaginary);
+    emitConstant(Value(value));
+}
+
 void Compiler::emitReturn()
 {
     if(current->ftype==FunctionType::INIT)
@@ -1077,6 +1084,7 @@ consteval Rules RulesMaker::make() noexcept
     set(TokenType::IDENTIFIER, &Compiler::variable, nullptr, Prec::NONE);
     set(TokenType::STRING, &Compiler::stringy, nullptr, Prec::NONE);
     set(TokenType::NUMBER, &Compiler::number, nullptr, Prec::NONE);
+    set(TokenType::IMAGINARY, &Compiler::imaginary, nullptr, Prec::NONE);
     set(TokenType::AND, nullptr, &Compiler::and_, Prec::AND);
     set(TokenType::FALSE, &Compiler::literal, nullptr, Prec::NONE);
     set(TokenType::NIL, &Compiler::literal, nullptr, Prec::NONE);

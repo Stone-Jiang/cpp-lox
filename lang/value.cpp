@@ -129,6 +129,8 @@ std::string Value::to_string() const
         return std::to_string(as_number());
     if(is_bool())
         return as_bool()? "true": "false";
+    if(is_obj())
+        return objectToString(*this);
     return "????";
 }
 
@@ -256,6 +258,9 @@ void Value::swap(Value& other)
 
 std::string Value::to_string() const
 {
+    if(is_obj())
+        return objectToString(*this);
+
     return std::visit([](auto&& value) -> std::string {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, std::monostate>)

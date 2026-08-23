@@ -5,7 +5,9 @@
 #include <span>
 #include <string_view>
 
-using NativeFn = Value (*)(int argCount, Value* args);
+class VM;
+
+using NativeFn = Value (*)(VM& vm, int argCount, Value* args);
 
 struct NativeDef
 {

@@ -3,7 +3,8 @@
 bool isAlpha(char c)
 {
     return (c >= 'a' && c <= 'z') ||
-        (c >= 'A' && c <= 'Z') || c == '_';
+        (c >= 'A' && c <= 'Z') || 
+        c == '_' || c == '\'';
 }
 
 bool isNumber(char c)
@@ -158,6 +159,13 @@ Token Scanner::number()
         while(isNumber(peek()))
             advance();
     }
+
+    if(peek() == 'i')
+    {
+        advance();
+        return tok(TokenType::IMAGINARY);
+    }
+
     return tok(TokenType::NUMBER);
 }
 

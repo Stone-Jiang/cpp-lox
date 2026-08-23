@@ -32,6 +32,7 @@ class VM
     size_t nextGC = 1024*1024;
     bool gcEnabled = false;
     bool isCollecting = false;
+    bool runtimeErrorRaised = false;
 
     Vector<CallFrame> frames;
     int frameCount = 0;
@@ -61,6 +62,7 @@ public:
 
     void push(Value val);
     Value pop();
+    void reportRuntimeError(std::string_view message);
 private:
     inline u8 read_byte(CallFrame* frame)
     {
@@ -83,7 +85,10 @@ private:
     }
 
     template<typename Op>
-    void binaryOp(Op op);
+    bool binaryOp(Op op);
+
+    template<typename Op>
+    bool complexBinaryOp(Op op);
 
     Result run();
 

@@ -1,5 +1,8 @@
 #include "object.h"
 
+#include <iomanip>
+#include <sstream>
+
 std::optional<ObjType> objType(const Value& value)
 {
     if(value.is_obj())
@@ -92,58 +95,63 @@ ObjBoundMethod* as_bound_meth(const Value& value)
     return static_cast<ObjBoundMethod*>(value.as_obj());
 }
 
-template <Objective T>
-bool is(const Value& value)
+// -----
+
+bool is_complex(const Value& value)
 {
-    if constexpr(std::is_same_v<T, Obj>)
-        return value.is_obj();
-    else if constexpr(std::is_same_v<T, ObjString>)
-        return isType(value, ObjType::STRING);
-    else if constexpr(std::is_same_v<T, ObjFunction>)
-        return isType(value, ObjType::FUNCTION);
-    else if constexpr(std::is_same_v<T, ObjNative>)
-        return isType(value, ObjType::NATIVE);
-    else if constexpr(std::is_same_v<T, ObjUpvalue>)
-        return isType(value, ObjType::UPVALUE);
-    else if constexpr(std::is_same_v<T, ObjClosure>)
-        return isType(value, ObjType::CLOSURE);
-    else if constexpr(std::is_same_v<T, ObjClass>)
-        return isType(value, ObjType::CLASS);
-    else if constexpr(std::is_same_v<T, ObjInstance>)
-        return isType(value, ObjType::INSTANCE);
-    else if constexpr(std::is_same_v<T, ObjBoundMethod>)
-        return isType(value, ObjType::BOUND_METHOD);
-    else
-        return false;
+    return isType(value, ObjType::COMPLEX);
 }
 
-template <Objective T>
-T* as(const Value& value)
+ObjComplex* as_complex(const Value& value)
 {
-    return static_cast<T*>(value.as_obj());
+    return static_cast<ObjComplex*>(value.as_obj());
 }
 
-template bool is<Obj>(const Value&);
-template bool is<ObjString>(const Value&);
-template bool is<ObjFunction>(const Value&);
-template bool is<ObjNative>(const Value&);
-template bool is<ObjUpvalue>(const Value&);
-template bool is<ObjClosure>(const Value&);
-template bool is<ObjClass>(const Value&);
-template bool is<ObjInstance>(const Value&);
-template bool is<ObjBoundMethod>(const Value&);
+// -----
 
-template Obj* as<Obj>(const Value&);
-template ObjString* as<ObjString>(const Value&);
-template ObjFunction* as<ObjFunction>(const Value&);
-template ObjNative* as<ObjNative>(const Value&);
-template ObjUpvalue* as<ObjUpvalue>(const Value&);
-template ObjClosure* as<ObjClosure>(const Value&);
-template ObjClass* as<ObjClass>(const Value&);
-template ObjInstance* as<ObjInstance>(const Value&);
-template ObjBoundMethod* as<ObjBoundMethod>(const Value&);
+namespace
+{
+std::string formatNumber(double value)
+{
+    if(value == 0.0)
+        value = 0.0;
 
-// ----
+    std::ostringstream output;
+    output << std::setprecision(15) << value;
+    return output.str();
+}
+
+std::string formatComplex(const std::complex<double>& value)
+{
+    const double real = value.real();
+    const double imaginary = value.imag();
+
+    if(imaginary == 0.0)
+        return formatNumber(real);
+    if(real == 0.0)
+        return formatNumber(imaginary) + "i";
+
+    return formatNumber(real) +
+        (imaginary >= 0.0 ? "+" : "") +
+        formatNumber(imaginary) + "i";
+}
+}
+
+std::string objectToString(const Value& value)
+{
+    if(!value.is_obj() || value.as_obj() == nullptr)
+        return "????";
+
+    switch(value.as_obj()->type)
+    {
+    case ObjType::STRING:
+        return as_str(value)->str();
+    case ObjType::COMPLEX:
+        return formatComplex(as_complex(value)->c);
+    default:
+        return "????";
+    }
+}
 
 void printFunction(const ObjFunction* func)
 {
@@ -164,7 +172,7 @@ void printObject(const Value& value)
         printFunction(as_func(value));
         break;
     case ObjType::STRING:
-        std::printf("%s", as_cstr(value));
+        std::printf("%s", objectToString(value).c_str());
         break;
     case ObjType::NATIVE:
         std::printf("<native fn>");
@@ -176,13 +184,16 @@ void printObject(const Value& value)
         printf("upvalue");
         break;
     case ObjType::CLASS:
-        printf("%s", as_class(value)->name->str().c_str());
+        printf("<cls %s>", as_class(value)->name->str().c_str());
         break;
     case ObjType::INSTANCE:
-        printf("%s instance", as_instance(value)->klass->name->str().c_str());
+        printf("<ins of cls %s>", as_instance(value)->klass->name->str().c_str());
         break;
     case ObjType::BOUND_METHOD:
         printFunction(as_bound_meth(value)->method->func);
+        break;
+    case ObjType::COMPLEX:
+        std::printf("%s", objectToString(value).c_str());
         break;
     default:
         std::printf("<object>");
@@ -210,5 +221,15 @@ bool objectsEqual(Obj* left, Obj* right)
         return true;
     if(left == nullptr || right == nullptr || left->type != right->type)
         return false;
-    return false;
+    switch(left->type)
+    {
+    case ObjType::STRING:
+        return static_cast<ObjString*>(left)->str() ==
+            static_cast<ObjString*>(right)->str();
+    case ObjType::COMPLEX:
+        return static_cast<ObjComplex*>(left)->c ==
+            static_cast<ObjComplex*>(right)->c;
+    default:
+        return false;
+    }
 }

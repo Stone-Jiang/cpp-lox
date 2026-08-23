@@ -6,6 +6,18 @@ Compiler Compiler::comp{};
 
 namespace
 {
+bool isNumeric(const Value& value)
+{
+    return value.is_number() || is_complex(value);
+}
+
+std::complex<double> asComplexNumber(const Value& value)
+{
+    return value.is_number()
+        ? std::complex<double>(value.as_number(), 0.0)
+        : as_complex(value)->c;
+}
+
 size_t saturatingAdd(size_t left, size_t right)
 {
     const size_t max = std::numeric_limits<size_t>::max();
@@ -58,6 +70,7 @@ VM::~VM()
 Result VM::interpret(const string& src)
 {
     gcEnabled = true;
+    runtimeErrorRaised = false;
 
     resetStack();
 
@@ -123,25 +136,43 @@ Result VM::run()
         {
             if(is_str(peek(0)) && is_str(peek(1)))
                 concat();
-            else if(peek(0).is_number() && peek(0).is_number())
+            else if(isNumeric(peek(0)) && isNumeric(peek(1)))
             {
-                double b = pop().as_number();
-                double a = pop().as_number();
-                push(Value(a+b));
+                if(!complexBinaryOp([](std::complex<double> a,
+                                       std::complex<double> b) { return a+b; }))
+                    return Result::RUNTIME_ERROR;
             }
             else
             {
-                runtimeError("Operands must be two numbers or two strings.");
+                runtimeError("Operands must be numbers, complex numbers, or strings.");
                 return Result::RUNTIME_ERROR;
             }
             break;
         }
         
-        case OpCode::SUBTRACT: binaryOp([](double a, double b) {return a-b;}); break;
-        case OpCode::MULTIPLY: binaryOp([](double a, double b) {return a*b;}); break;
-        case OpCode::DIVIDE:   binaryOp([](double a, double b) {return a/b;}); break;
-        case OpCode::GREATER: binaryOp([](double a, double b) {return a>b;}); break;
-        case OpCode::LESS: binaryOp([](double a, double b) {return a<b;}); break;
+        case OpCode::SUBTRACT:
+            if(!complexBinaryOp([](std::complex<double> a,
+                                   std::complex<double> b) { return a-b; }))
+                return Result::RUNTIME_ERROR;
+            break;
+        case OpCode::MULTIPLY:
+            if(!complexBinaryOp([](std::complex<double> a,
+                                   std::complex<double> b) { return a*b; }))
+                return Result::RUNTIME_ERROR;
+            break;
+        case OpCode::DIVIDE:
+            if(!complexBinaryOp([](std::complex<double> a,
+                                   std::complex<double> b) { return a/b; }))
+                return Result::RUNTIME_ERROR;
+            break;
+        case OpCode::GREATER:
+            if(!binaryOp([](double a, double b) {return a>b;}))
+                return Result::RUNTIME_ERROR;
+            break;
+        case OpCode::LESS:
+            if(!binaryOp([](double a, double b) {return a<b;}))
+                return Result::RUNTIME_ERROR;
+            break;
 
         case OpCode::NOT:
             push(Value(isFalsy(pop()))); break;
@@ -163,13 +194,25 @@ Result VM::run()
 
         case OpCode::NEGATE:
         {
-            if(!peek(0).is_number())
+            if(!isNumeric(peek(0)))
             {
-                runtimeError("Operand must be a number.");
+                runtimeError("Operand must be a number or complex number.");
                 return Result::RUNTIME_ERROR;
             }
-            auto temp = -(pop().as_number());
-            push(Value(temp));
+
+            Value operand = peek(0);
+            if(is_complex(operand))
+            {
+                const auto result = -as_complex(operand)->c;
+                auto* value = makeObj<ObjComplex>(*this,
+                    result.real(), result.imag());
+                pop();
+                push(Value(value));
+            }
+            else
+            {
+                push(Value(-pop().as_number()));
+            }
             break;
         }
         case OpCode::RETURN:
@@ -414,6 +457,7 @@ Result VM::run()
 
 template<typename... Args>
 void VM::runtimeError(std::string_view fmt, Args&&... args) {
+    runtimeErrorRaised = true;
     auto message = std::vformat(fmt, std::make_format_args(std::forward<Args>(args)...));
 
     std::cerr << "[runtime error] " << message << '\n';
@@ -431,6 +475,11 @@ void VM::runtimeError(std::string_view fmt, Args&&... args) {
     }
 
     resetStack();
+}
+
+void VM::reportRuntimeError(std::string_view message)
+{
+    runtimeError(message);
 }
 
 void VM::resetStack()
@@ -507,16 +556,48 @@ void VM::freeObj(Obj* object)
 }
 
 template<typename Op>
-void VM::binaryOp(Op op)
+bool VM::binaryOp(Op op)
 {
     if(!peek(0).is_number() || !peek(1).is_number()) {
-        runtimeError("Operands must be numbers.");
-        return;
+        runtimeError("Operands must be real numbers.");
+        return false;
     }
     
     double b = pop().as_number();
     double a = pop().as_number();
     push(Value(op(a,b))); 
+    return true;
+}
+
+template<typename Op>
+bool VM::complexBinaryOp(Op op)
+{
+    const Value right = peek(0);
+    const Value left = peek(1);
+
+    if(!isNumeric(left) || !isNumeric(right))
+    {
+        runtimeError("Operands must be numbers or complex numbers.");
+        return false;
+    }
+
+    const auto result = op(asComplexNumber(left), asComplexNumber(right));
+
+    if(is_complex(left) || is_complex(right))
+    {
+        auto* value = makeObj<ObjComplex>(*this,
+            result.real(), result.imag());
+        pop();
+        pop();
+        push(Value(value));
+    }
+    else
+    {
+        pop();
+        pop();
+        push(Value(result.real()));
+    }
+    return true;
 }
 
 bool VM::callValue(Value callee, int argCount)
@@ -538,8 +619,11 @@ bool VM::callValue(Value callee, int argCount)
             }
 
             Value result = native->func(
+                *this,
                 argCount,
                 stack.data() + stack.size() - static_cast<size_t>(argCount));
+            if(runtimeErrorRaised)
+                return false;
             stack.resize(stack.size() - static_cast<size_t>(argCount) - 1);
             push(result);
             return true;

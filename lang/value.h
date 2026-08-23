@@ -84,6 +84,7 @@ public:
     bool operator==(std::monostate) const;
 };
 
+std::string objectToString(const Value& value);
 void printValue(const Value& value);
 
 class ValueArray

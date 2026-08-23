@@ -33,6 +33,8 @@ public:
             std::cout<<">> ";
             if(!getline(std::cin, line))
                 break;
+            if(line.substr(0,2)=="-r")
+                return process(line.substr(3, line.size()));
             VM::vm.interpret(line);
         }
         return 0;
@@ -41,13 +43,13 @@ public:
 
 int main(int argc, char* argv[])
 {
-    std::cout<<sizeof(Value)<<"\n";
-    if(argc==2)
+    if(argc==1)
+        return Runtime::repl();
+    else if(argc==2)
         return Runtime::process(argv[1]);
-
-    std::cout<<"Enter file path or press enter to start REPL: ";
-    string str;
-    std::getline(std::cin, str);
-
-    return str.empty()? Runtime::repl(): Runtime::process(str);
+    else 
+    {
+        std::cout<<"Wrong usage.";
+        return -1;
+    }
 }
