@@ -8,8 +8,6 @@
 
 namespace
 {
-constexpr double ZERO_EPSILON = 1e-9;
-
 double disregardZero(double value)
 {
     return std::abs(value) < ZERO_EPSILON ? 0.0 : value;

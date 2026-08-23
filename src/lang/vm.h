@@ -129,10 +129,16 @@ private:
     void defineNative(const NativeDef& def);
     ObjUpvalue* captureUpvalue(Value* local);
     void closeUpvalues(Value* last);
+    bool findMember(ObjClass* klass, ObjString* name, ClassMember& member);
+    bool getClassProperty(ObjClass* klass, ObjString* name);
+    bool getInstanceProperty(ObjInstance* instance, ObjString* name);
+    bool setClassProperty(ObjClass* klass, ObjString* name, Value value);
     bool bindMethod(ObjClass* klass, ObjString* name);
+    bool bindSuperMethod(ObjClass* klass, ObjString* name);
     bool invoke(ObjString* name, int argCount);
     bool invokeClass(ObjClass* klass, ObjString* name, int argCount);
-    void defineMethod(ObjString* name);
+    bool invokeSuper(ObjClass* klass, ObjString* name, int argCount);
+    void defineMethod(ObjString* name, bool isStatic);
 
     // GC
     void collectGarbage();
@@ -142,6 +148,7 @@ private:
     void markObject(Obj* object);
 
     void markTable(Table& table);
+    void markMemberTable(MemberTable& table);
     void removeWhite(StringPool& pool);
 
     void traceRefs();

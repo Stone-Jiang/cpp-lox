@@ -100,10 +100,11 @@ struct ObjClosure: Obj
 struct ObjClass: Obj
 {
     ObjString* name = nullptr;
-    Table methods;
+    ObjClass* superclass = nullptr;
+    MemberTable members;
 
     ObjClass(VM* owner, ObjString* name):
-        Obj(owner, ObjType::CLASS), name(name), methods(owner) {}
+        Obj(owner, ObjType::CLASS), name(name), members(owner) {}
 };
 
 struct ObjInstance: Obj

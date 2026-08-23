@@ -62,7 +62,12 @@ struct Upvalue
 
 enum class FunctionType
 {
-    FUNCTION, INIT, METHOD, SCRIPT
+    FUNCTION, INIT, METHOD, STATIC_METHOD, SCRIPT
+};
+
+enum class MethodContext
+{
+    NONE, INSTANCE, STATIC
 };
 
 class ClassCompiler
@@ -168,7 +173,7 @@ private:
     void call(bool);
     void block();
     void function_(FunctionType type);
-    void method();
+    void method(bool isStatic);
     void classDecl();
     void funDecl();
 
@@ -206,6 +211,7 @@ private:
     void dot(bool canAssign);
     void this_(bool);
     void super_(bool);
+    MethodContext methodContext() const;
 
     u8 argumentList();
     Token syntheticToken(const char* text);

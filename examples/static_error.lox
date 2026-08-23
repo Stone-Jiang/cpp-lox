@@ -1,0 +1,12 @@
+// This file is meant to fail at compile time.
+// Expected error:
+// [compile error] line 4 at 'this': Can't use 'this' in a static method.
+
+class Nope {
+  static bad() {
+    fun inner() {
+      return this;
+    }
+    return inner();
+  }
+}

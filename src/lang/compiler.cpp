@@ -37,7 +37,7 @@ Compiler::Compiler(VM& vm, FunctionType type):
     local->depth = 0;
     local->isCapt = false;
 
-    if(type != FunctionType::FUNCTION)
+    if(type == FunctionType::METHOD || type == FunctionType::INIT)
     {
         local->name.start = "this";
         local->name.len = 4;
@@ -65,8 +65,8 @@ ObjFunction* Compiler::compile(VM& vm, const string& src)
     Local* local = &locals[localCount++];
     local->depth = 0;
     local->isCapt = false;
-    local->name.start = "this";
-    local->name.len = 4;
+    local->name.start = "";
+    local->name.len = 0;
 
     parser = Parser{};
     this->chunk = &func->chunk;
@@ -516,17 +516,18 @@ void Compiler::function_(FunctionType type)
     }
 }
 
-void Compiler::method()
+void Compiler::method(bool isStatic)
 {
     consume(TokenType::IDENTIFIER, "Expect method name.");
     u8 constant = identConstant(parser.prev);
 
-    FunctionType type = FunctionType::METHOD;
-    if(std::string_view(parser.prev.start, static_cast<size_t>(parser.prev.len)) == "init")
+    FunctionType type = isStatic ? FunctionType::STATIC_METHOD : FunctionType::METHOD;
+    if(!isStatic &&
+       std::string_view(parser.prev.start, static_cast<size_t>(parser.prev.len)) == "init")
         type = FunctionType::INIT;
     function_(type);
 
-    emit(OpCode::METHOD, constant);
+    emit(isStatic ? OpCode::STATIC_METHOD : OpCode::METHOD, constant);
 }
 
 void Compiler::classDecl()
@@ -561,7 +562,7 @@ void Compiler::classDecl()
     namedVariable(classname, false);
     consume(TokenType::LEFT_BRACE, "Expect '{' before class body.");
     while(!check(TokenType::RIGHT_BRACE) && !check(TokenType::TEOF))
-        method();
+        method(match(TokenType::STATIC));
     consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
     emit(OpCode::POP);
 
@@ -974,15 +975,32 @@ void Compiler::this_(bool)
         return;
     }
 
+    if(methodContext() == MethodContext::STATIC)
+    {
+        error("Can't use 'this' in a static method.");
+        return;
+    }
+
     variable(false);
 }
 
 void Compiler::super_(bool)
 {
     if(currentClass == nullptr)
+    {
         error("Can't use 'super' outside of a class.");
+        return;
+    }
     else if(!currentClass->hasSuper)
+    {
         error("Can't use 'super' in a class with no superclass.");
+        return;
+    }
+    else if(methodContext() == MethodContext::STATIC)
+    {
+        error("Can't use 'super' in a static method.");
+        return;
+    }
 
     consume(TokenType::DOT, "Expect '.' after 'super'.");
     consume(TokenType::IDENTIFIER, "Expect superclass method name.");
@@ -1001,6 +1019,25 @@ void Compiler::super_(bool)
         namedVariable(syntheticToken("super"), false);
         emit(OpCode::GET_SUPER, name);
     }
+}
+
+MethodContext Compiler::methodContext() const
+{
+    for(Compiler* compiler = current; compiler != nullptr; compiler = compiler->enclosing)
+    {
+        switch(compiler->ftype)
+        {
+        case FunctionType::METHOD:
+        case FunctionType::INIT:
+            return MethodContext::INSTANCE;
+        case FunctionType::STATIC_METHOD:
+            return MethodContext::STATIC;
+        case FunctionType::FUNCTION:
+        case FunctionType::SCRIPT:
+            break;
+        }
+    }
+    return MethodContext::NONE;
 }
 
 u8 Compiler::argumentList()

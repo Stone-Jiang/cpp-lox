@@ -18,6 +18,8 @@
 5. Added native complex numbers as a part of number features, kept as an object instead of `Value`, keeping the same cache efficiency.
 6. Added scanning, compiling and computing complex numbers. Real numbers are automatically upgraded when computing with complex numbers. 
 7. Added numerous native mathematical functions with normal versions for real numbers, and apostrophe'd versions for complex numbers.
+8. Added static methods in classes declared as `static method()`, which can be called by `instance.method()` and also `Class.method()`. 
+9. Runtime patching methods is allowed (`Class.method = func`), the cost is runtime lookup of static methods.
 
 
 ## TODO List
@@ -27,24 +29,23 @@
    1. `+=`
    2. `++` as statement instead of expression
    3. lambdas/anon functions maybe with `lambda` or perhaps `\`?
-4. Native containers
+4. A separate `int` type?
+5. Native containers
    1. Native arrays and their functions
    2. Native aligned matrices and their math functions.
    3. Native map structure
-5. Templated helper functions
-6. Big decimals and more number literals?
-7. Identifying 
-8. Possible type/meta info like class name or typename at runtime.
-9. Minimal reflections:
+6. Templated helper functions
+7. Possible type/meta info like class name or typename at runtime.
+8. Minimal reflections:
    1. `eval()`
    2. unsafe `exec()`
    3. unsafe getting and setting fields by strings
-10. Possible concurrency model?
-11. Possible importing and helping commands? Maybe like `:import`
-12. Maybe improvements on GC but I'm not sure.
-13. Maybe support for unicode?
-14. Better repl behavior: automatic printing & emitted semicolon
-15. {}-style formatting strings and maybe %-style formatting strings
-16. Opening and closing files
-17. Flexible number of arguments & default value passing
-18. 
+9.  Possible concurrency model?
+10. Possible importing and helping commands? Maybe like `:import`
+11. Maybe improvements on GC but I'm not sure.
+12. Maybe support for unicode?
+13. Better repl behavior: automatic printing & emitted semicolon
+14. {}-style formatting strings and maybe %-style formatting strings
+15. Opening and closing files
+16. Flexible number of arguments & default value passing
+17. 

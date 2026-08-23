@@ -354,47 +354,56 @@ Result VM::run()
             break;
         case OpCode::GET_PROPERTY:
         {
-            if(!is_instance(peek(0)))
+            Value receiver = peek(0);
+            ObjString* name = read_str(frame);
+            if(is_instance(receiver))
             {
-                runtimeError("Only instances have properties.");
-                return Result::RUNTIME_ERROR;
+                if(!getInstanceProperty(as_instance(receiver), name))
+                    return Result::RUNTIME_ERROR;
+                break;
+            }
+            if(is_class(receiver))
+            {
+                if(!getClassProperty(as_class(receiver), name))
+                    return Result::RUNTIME_ERROR;
+                break;
             }
 
-            auto instance = as_instance(peek(0));
-            auto name = read_str(frame);
-            Value value;
-
-            if(instance->fields.get(name, value))
+            runtimeError("Only instances and classes have properties.");
+            return Result::RUNTIME_ERROR;
+        }
+        case OpCode::SET_PROPERTY:    
+        {
+            Value receiver = peek(1);
+            ObjString* name = read_str(frame);
+            if(is_instance(receiver))
             {
+                auto instance = as_instance(receiver);
+                instance->fields.set(name, peek(0));
+                Value value = pop();
+                pop();
+                push(value);
+                break;
+            }
+            if(is_class(receiver))
+            {
+                if(!setClassProperty(as_class(receiver), name, peek(0)))
+                    return Result::RUNTIME_ERROR;
+                Value value = pop();
                 pop();
                 push(value);
                 break;
             }
 
-            if(!bindMethod(instance->klass, name))
-            {
-                return Result::RUNTIME_ERROR;
-            }
-            break;
-        }
-        case OpCode::SET_PROPERTY:    
-        {
-            if(!is_instance(peek(1)))
-            {
-                runtimeError("Only instances have fields.");
-                return Result::RUNTIME_ERROR;
-            }
-
-            auto instance = as_instance(peek(1));
-            instance->fields.set(read_str(frame), peek(0));
-            Value value = pop();
-            pop();
-            push(value);
-            break;
+            runtimeError("Only instances and classes have fields.");
+            return Result::RUNTIME_ERROR;
         }
 
         case OpCode::METHOD:
-            defineMethod(read_str(frame));
+            defineMethod(read_str(frame), false);
+            break;
+        case OpCode::STATIC_METHOD:
+            defineMethod(read_str(frame), true);
             break;
         
         case OpCode::INVOKE:
@@ -418,10 +427,7 @@ Result VM::run()
             }
 
             auto subclass = as_class(peek(0));
-
-            auto& from = as_class(superclass)->methods.m;
-            for(auto it=from.begin(); it!=from.end();++it)
-                subclass->methods.set(it->first, it->second);
+            subclass->superclass = as_class(superclass);
 
             pop();
             break;
@@ -432,7 +438,7 @@ Result VM::run()
             auto name = read_str(frame);
             auto superclass = as_class(pop());
 
-            if(!bindMethod(superclass, name))
+            if(!bindSuperMethod(superclass, name))
                 return Result::RUNTIME_ERROR;
             break;
         }
@@ -442,7 +448,7 @@ Result VM::run()
             auto method = read_str(frame);
             int argCount = read_byte(frame);
             auto superclass = as_class(pop());
-            if(!invokeClass(superclass, method, argCount))
+            if(!invokeSuper(superclass, method, argCount))
                 return Result::RUNTIME_ERROR;
             frame = &frames[frameCount-1];
             break;
@@ -636,10 +642,15 @@ bool VM::callValue(Value callee, int argCount)
             stack[stack.size()-static_cast<size_t>(argCount)-1] =
                 Value(makeObj<ObjInstance>(*this, klass));
 
-            Value init;
-            if(klass->methods.get(initStr, init))
+            ClassMember init;
+            if(findMember(klass, initStr, init) && !init.isStatic)
             {
-                return call(as_closure(init), argCount);
+                if(!is_closure(init.value))
+                {
+                    runtimeError("Initializer must be a method.");
+                    return false;
+                }
+                return call(as_closure(init.value), argCount);
             }
             else if(argCount !=0)
             {
@@ -743,16 +754,103 @@ void VM::closeUpvalues(Value* last)
     }
 }
 
+bool VM::findMember(ObjClass* klass, ObjString* name, ClassMember& member)
+{
+    for(ObjClass* current = klass; current != nullptr; current = current->superclass)
+    {
+        if(current->members.get(name, member))
+            return true;
+    }
+    return false;
+}
+
+bool VM::getClassProperty(ObjClass* klass, ObjString* name)
+{
+    ClassMember member;
+    if(!findMember(klass, name, member))
+    {
+        runtimeError("Undefined property '{}'.", name->str());
+        return false;
+    }
+    if(!member.isStatic)
+    {
+        runtimeError("Only static properties can be accessed on classes.");
+        return false;
+    }
+
+    pop();
+    push(member.value);
+    return true;
+}
+
+bool VM::getInstanceProperty(ObjInstance* instance, ObjString* name)
+{
+    Value value;
+    if(instance->fields.get(name, value))
+    {
+        pop();
+        push(value);
+        return true;
+    }
+
+    return bindMethod(instance->klass, name);
+}
+
+bool VM::setClassProperty(ObjClass* klass, ObjString* name, Value value)
+{
+    ClassMember member{value, false};
+    if(!klass->members.get(name, member))
+    {
+        ClassMember inherited;
+        if(findMember(klass->superclass, name, inherited))
+            member.isStatic = inherited.isStatic;
+    }
+    else
+    {
+        member.value = value;
+    }
+
+    klass->members.set(name, member);
+    return true;
+}
+
 bool VM::bindMethod(ObjClass* klass, ObjString* name)
 {
-    Value method;
-    if(!klass->methods.get(name, method))
+    ClassMember member;
+    if(!findMember(klass, name, member))
     {
         runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
 
-    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(method));
+    if(member.isStatic || !is_closure(member.value))
+    {
+        pop();
+        push(member.value);
+        return true;
+    }
+
+    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(member.value));
+    pop();
+    push(Value(bound));
+    return true;
+}
+
+bool VM::bindSuperMethod(ObjClass* klass, ObjString* name)
+{
+    ClassMember member;
+    if(!findMember(klass, name, member))
+    {
+        runtimeError("Undefined property '{}'.", name->str());
+        return false;
+    }
+    if(member.isStatic || !is_closure(member.value))
+    {
+        runtimeError("Superclass member '{}' is not an instance method.", name->str());
+        return false;
+    }
+
+    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(member.value));
     pop();
     push(Value(bound));
     return true;
@@ -762,40 +860,82 @@ bool VM::invoke(ObjString* name, int argCount)
 {
     Value receiver = peek(argCount);
 
-    if(!is_instance(receiver))
+    if(is_instance(receiver))
     {
-        runtimeError("Only instances have methods.");
-        return false;
+        auto instance = as_instance(receiver);
+
+        Value value;
+        if(instance->fields.get(name, value))
+        {
+            stack[stack.size()-static_cast<size_t>(argCount)-1] = value;
+            return callValue(value, argCount);
+        }
+
+        return invokeClass(instance->klass, name, argCount);
     }
 
-    auto instance = as_instance(receiver);
-
-    Value value;
-    if(instance->fields.get(name, value))
+    if(is_class(receiver))
     {
-        stack[stack.size()-static_cast<size_t>(argCount)-1] = value;
-        return callValue(value, argCount);
+        ClassMember member;
+        if(!findMember(as_class(receiver), name, member))
+        {
+            runtimeError("Undefined property '{}'.", name->str());
+            return false;
+        }
+        if(!member.isStatic)
+        {
+            runtimeError("Only static methods can be called on classes.");
+            return false;
+        }
+
+        stack[stack.size()-static_cast<size_t>(argCount)-1] = member.value;
+        return callValue(member.value, argCount);
     }
 
-    return invokeClass(instance->klass, name, argCount);
+    runtimeError("Only instances and classes have methods.");
+    return false;
 }
 
 bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
 {
-    Value meth;
-    if(!klass->methods.get(name, meth))
+    ClassMember member;
+    if(!findMember(klass, name, member))
     {
         runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
-    return call(as_closure(meth), argCount);
+
+    if(member.isStatic || !is_closure(member.value))
+    {
+        stack[stack.size()-static_cast<size_t>(argCount)-1] = member.value;
+        return callValue(member.value, argCount);
+    }
+
+    return call(as_closure(member.value), argCount);
 }
 
-void VM::defineMethod(ObjString* name)
+bool VM::invokeSuper(ObjClass* klass, ObjString* name, int argCount)
+{
+    ClassMember member;
+    if(!findMember(klass, name, member))
+    {
+        runtimeError("Undefined property '{}'.", name->str());
+        return false;
+    }
+    if(member.isStatic || !is_closure(member.value))
+    {
+        runtimeError("Superclass member '{}' is not an instance method.", name->str());
+        return false;
+    }
+
+    return call(as_closure(member.value), argCount);
+}
+
+void VM::defineMethod(ObjString* name, bool isStatic)
 {
     Value method = peek(0);
     auto klass = as_class(peek(1));
-    klass->methods.set(name, method);
+    klass->members.set(name, ClassMember{method, isStatic});
     pop();
 }
 
@@ -894,6 +1034,15 @@ void VM::markTable(Table& table)
     }
 }
 
+void VM::markMemberTable(MemberTable& table)
+{
+    for(auto it=table.m.begin(); it!=table.m.end(); ++it)
+    {
+        markObject(it->first);
+        markValue(it->second.value);
+    }
+}
+
 void VM::removeWhite(StringPool& pool)
 {
     for(auto it=pool.m.begin(); it!=pool.m.end();)
@@ -936,7 +1085,8 @@ void VM::blackenObject(Obj* object)
     {
         auto klass = static_cast<ObjClass*>(object);
         markObject(klass->name);
-        markTable(klass->methods);
+        markObject(static_cast<Obj*>(klass->superclass));
+        markMemberTable(klass->members);
         break;
     }
     case ObjType::INSTANCE:

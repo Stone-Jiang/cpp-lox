@@ -117,6 +117,8 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return simpleInstruction("OpCode::INHERIT", offset);
         case OpCode::METHOD:
             return constantInstruction("OpCode::METHOD", chunk, offset);
+        case OpCode::STATIC_METHOD:
+            return constantInstruction("OpCode::STATIC_METHOD", chunk, offset);
         default:
             printf("Unknown opcode %d\n", ins);
             return offset + 1;
