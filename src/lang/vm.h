@@ -34,10 +34,11 @@ class VM
     bool isCollecting = false;
     bool runtimeErrorRaised = false;
 
-    Vector<CallFrame> frames;
+    std::array<CallFrame, FRAMES_MAX> frames{};
     int frameCount = 0;
 
-    Vector<Value> stack;
+    std::array<Value, STACK_MAX> stack{};
+    Value* stackTop = stack.data();
 
     Obj* objects = nullptr;
     ObjUpvalue* openUpvalues = nullptr;
@@ -48,15 +49,13 @@ class VM
 
     Vector<Obj*> grayStack;
 
+public:
     VM();
     ~VM();
     VM(const VM&) = delete;
     VM& operator=(const VM&) = delete;
 
-public:
     ObjString* initStr = nullptr;
-
-    static VM vm;
     
     Result interpret(const string& src);
 
@@ -92,11 +91,16 @@ private:
 
     Result run();
 
+    size_t stackSize() const noexcept
+    {
+        return static_cast<size_t>(stackTop - stack.data());
+    }
+
     Value peek(int dist)
     {
-        if(dist < 0 || static_cast<size_t>(dist) >= stack.size())
+        if(dist < 0 || static_cast<size_t>(dist) >= stackSize())
             throw std::overflow_error("access out of bounds");
-        return stack[stack.size() - 1 - static_cast<size_t>(dist)];
+        return stackTop[-1 - dist];
     }
 
     static bool isFalsy(Value value)

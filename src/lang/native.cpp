@@ -538,6 +538,15 @@ constexpr std::array definitions {
     NativeDef{"cos'", 1, cosCxNative},
     NativeDef{"tan'", 1, tanCxNative},
     NativeDef{"exp'", 1, expCxNative},
+    NativeDef{"sinh'", 1, sinhCxNative},
+    NativeDef{"cosh'", 1, coshCxNative},
+    NativeDef{"tanh'", 1, tanhCxNative},
+    NativeDef{"asin'", 1, asinCxNative},
+    NativeDef{"acos'", 1, acosCxNative},
+    NativeDef{"atan'", 1, atanCxNative},
+    NativeDef{"asinh'", 1, asinhCxNative},
+    NativeDef{"acosh'", 1, acoshCxNative},
+    NativeDef{"atanh'", 1, atanhCxNative},
 };
 
 }

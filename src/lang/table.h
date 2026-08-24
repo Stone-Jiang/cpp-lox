@@ -54,7 +54,6 @@ public:
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;
 
-    std::optional<Value> find(ObjString* key) const;
     bool get(ObjString* key, Value& value);
     bool set(ObjString* key, Value val);
     bool del(ObjString* key);
@@ -85,7 +84,6 @@ public:
     MemberTable(const MemberTable&) = delete;
     MemberTable& operator=(const MemberTable&) = delete;
 
-    std::optional<ClassMember> find(ObjString* key) const;
     bool get(ObjString* key, ClassMember& value);
     bool set(ObjString* key, const ClassMember& val);
     bool del(ObjString* key);

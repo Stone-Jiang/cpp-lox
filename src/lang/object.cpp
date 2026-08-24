@@ -3,11 +3,11 @@
 #include <iomanip>
 #include <sstream>
 
-std::optional<ObjType> objType(const Value& value)
+ObjType objType(const Value& value)
 {
     if(value.is_obj())
         return value.as_obj()->type;
-    return std::nullopt;
+    return ObjType::NONE;
 }
 
 bool isType(const Value& value, ObjType type)

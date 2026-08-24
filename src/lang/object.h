@@ -12,7 +12,16 @@ void allocObj(VM* owner, Obj* object, size_t size);
 
 enum class ObjType
 {
-    BOUND_METHOD, CLASS, CLOSURE, FUNCTION, INSTANCE, NATIVE, STRING, COMPLEX, UPVALUE, NOT
+    OBJ, // for debug only
+    BOUND_METHOD, 
+    CLASS, CLOSURE, 
+    FUNCTION, 
+    INSTANCE, 
+    NATIVE, 
+    STRING, 
+    COMPLEX, 
+    UPVALUE,
+    NONE // for debug only
 };
 
 struct Obj
@@ -24,7 +33,7 @@ struct Obj
 
     Obj(VM* owner, ObjType type): owner(owner), type(type) {}
 
-    Obj(): type(ObjType::NOT) {}
+    Obj(): type(ObjType::OBJ) {}
 };
 
 struct ObjString: Obj
@@ -125,7 +134,7 @@ struct ObjBoundMethod: Obj
         Obj(owner, ObjType::BOUND_METHOD), receiver(val), method(c) {}
 };
 
-std::optional<ObjType> objType(const Value& value);
+ObjType objType(const Value& value);
 bool isType(const Value& value, ObjType type);
 
 bool is_str(const Value& value);

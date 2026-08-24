@@ -6,7 +6,7 @@
 class Runtime
 {
 public:
-    static int process(const string& path)
+    static int process(VM& vm, const string& path)
     {
         std::ifstream file(path);
         if(!file.is_open())
@@ -17,7 +17,7 @@ public:
         std::stringstream buf;
         buf<<file.rdbuf();
 
-        auto result = VM::vm.interpret(buf.str());
+        auto result = vm.interpret(buf.str());
         if(result==Result::COMPILE_ERROR)
             return 65;
         if(result==Result::RUNTIME_ERROR)
@@ -25,7 +25,7 @@ public:
         return 0;
     }
 
-    static int repl()
+    static int repl(VM& vm)
     {
         while (true)
         {
@@ -34,19 +34,28 @@ public:
             if(!getline(std::cin, line))
                 break;
             if(line.substr(0,2)=="-r")
-                return process(line.substr(3, line.size()));
-            VM::vm.interpret(line);
+                return process(vm, line.substr(3, line.size()));
+            vm.interpret(line);
         }
         return 0;
     }
 };
 
+void test()
+{
+    std::cout<<sizeof(int)<<std::endl;
+    std::cout<<sizeof(double)<<std::endl;
+    std::cout<<sizeof(Value)<<std::endl;
+};
+
 int main(int argc, char* argv[])
 {
+    VM vm;
+
     if(argc==1)
-        return Runtime::repl();
+        return Runtime::repl(vm);
     else if(argc==2)
-        return Runtime::process(argv[1]);
+        return Runtime::process(vm, argv[1]);
     else 
     {
         std::cout<<"Wrong usage.";

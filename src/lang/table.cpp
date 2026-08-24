@@ -1,15 +1,6 @@
 #include "table.h"
 #include "object.h"
 
-namespace
-{
-size_t saturatingAdd(size_t left, size_t right)
-{
-    const size_t max = std::numeric_limits<size_t>::max();
-    return right > max - left ? max : left + right;
-}
-}
-
 Table::Table(VM* vm): owner(vm)
 {
     #ifndef BETTER_HASH_TABLE
@@ -62,14 +53,6 @@ void Table::ensureCapacity(size_t entries)
     m.reserve(entries);
     trackAllocation(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
-}
-
-std::optional<Value> Table::find(ObjString* key) const
-{
-    auto it = m.find(key);
-    if(it==m.end())
-        return std::nullopt;
-    return std::make_optional<>(it->second);
 }
 
 bool Table::get(ObjString* key, Value& value)
@@ -168,14 +151,6 @@ void MemberTable::ensureCapacity(size_t entries)
     m.reserve(entries);
     trackAllocation(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
-}
-
-std::optional<ClassMember> MemberTable::find(ObjString* key) const
-{
-    auto it = m.find(key);
-    if(it == m.end())
-        return std::nullopt;
-    return std::make_optional<>(it->second);
 }
 
 bool MemberTable::get(ObjString* key, ClassMember& value)

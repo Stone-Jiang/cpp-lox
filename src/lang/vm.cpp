@@ -1,7 +1,6 @@
 #include "vm.h"
 #include <algorithm>
 
-VM VM::vm{};
 Compiler Compiler::comp{};
 
 namespace
@@ -46,11 +45,8 @@ size_t nextCollectionThreshold(size_t liveBytes)
 }
 
 VM::VM():
-    frames(this), stack(this), globals(this), strings(this), grayStack(this)
+    globals(this), strings(this), grayStack(this)
 {
-    frames.reserve(FRAMES_MAX);
-    stack.reserve(STACK_MAX);
-
     const auto natives = nativeDefinitions();
     globals.reserve(natives.size());
 
@@ -89,18 +85,16 @@ Result VM::interpret(const string& src)
 
 void VM::push(Value val)
 {
-    if(stack.size() >= STACK_MAX)
+    if(stackTop == stack.data() + STACK_MAX)
         throw std::overflow_error("stack overflow");
-    stack.push_back(val);
+    *stackTop++ = val;
 }
 
 Value VM::pop()
 {
-    if(stack.empty())
+    if(stackTop == stack.data())
         throw std::runtime_error("empty stack");
-    auto temp = stack.back();
-    stack.pop_back();
-    return temp;
+    return *--stackTop;
 }
 
 Result VM::run()
@@ -111,7 +105,7 @@ Result VM::run()
     {
         #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
-        for(auto it=stack.begin(); it!=stack.end(); ++it) 
+        for(auto it=stack.data(); it!=stackTop; ++it)
         {
             printf("[ ");
             printValue(*it);
@@ -219,17 +213,14 @@ Result VM::run()
         {
             Value result = pop();
             closeUpvalues(frame->slots);
-            size_t slotStart = static_cast<size_t>(frame->slots - stack.data());
-
-            frames.pop_back();
-            frameCount = static_cast<int>(frames.size());
-            stack.resize(slotStart);
+            stackTop = frame->slots;
+            frameCount--;
 
             if(frameCount == 0)
                 return Result::OK;
 
             push(result);
-            frame = &frames.back();
+            frame = &frames[frameCount-1];
             break;
         }
         case OpCode::PRINT:
@@ -345,7 +336,7 @@ Result VM::run()
         }
         case OpCode::CLOSE_UPVALUE:
         {
-            closeUpvalues(&stack.back());
+            closeUpvalues(stackTop - 1);
             pop();
             break;
         }
@@ -492,9 +483,8 @@ void VM::resetStack()
 {
     closeUpvalues(stack.data());
     openUpvalues = nullptr;
-    frames.clear();
     frameCount = 0;
-    stack.clear();
+    stackTop = stack.data();
 }
 
 void VM::freeObjs()
@@ -610,7 +600,7 @@ bool VM::callValue(Value callee, int argCount)
 {
     if(callee.is_obj())
     {
-        switch (*objType(callee))
+        switch (objType(callee))
         {
         case ObjType::FUNCTION:
             return call(as_closure(callee), argCount);
@@ -627,10 +617,10 @@ bool VM::callValue(Value callee, int argCount)
             Value result = native->func(
                 *this,
                 argCount,
-                stack.data() + stack.size() - static_cast<size_t>(argCount));
+                stackTop - argCount);
             if(runtimeErrorRaised)
                 return false;
-            stack.resize(stack.size() - static_cast<size_t>(argCount) - 1);
+            stackTop -= argCount + 1;
             push(result);
             return true;
         }
@@ -639,7 +629,7 @@ bool VM::callValue(Value callee, int argCount)
         case ObjType::CLASS:
         {
             auto klass = as_class(callee);
-            stack[stack.size()-static_cast<size_t>(argCount)-1] =
+            stackTop[-argCount-1] =
                 Value(makeObj<ObjInstance>(*this, klass));
 
             ClassMember init;
@@ -663,10 +653,11 @@ bool VM::callValue(Value callee, int argCount)
         case ObjType::BOUND_METHOD:
         {
             auto bound = as_bound_meth(callee);
-            stack[stack.size()-static_cast<size_t>(argCount)-1] = bound->receiver;
+            stackTop[-argCount-1] = bound->receiver;
             return call(bound->method, argCount);
         }
         default:
+            // unreachable
             break;
         }
     }
@@ -689,9 +680,8 @@ bool VM::call(ObjClosure* clos, int argCount)
         return false;
     }
 
-    size_t slotStart = stack.size() - static_cast<size_t>(argCount) - 1;
-    frames.push_back({clos, clos->func->chunk.code.data(), stack.data() + slotStart});
-    frameCount = static_cast<int>(frames.size());
+    Value* slots = stackTop - argCount - 1;
+    frames[frameCount++] = {clos, clos->func->chunk.code.data(), slots};
     return true;
 }
 
@@ -867,7 +857,7 @@ bool VM::invoke(ObjString* name, int argCount)
         Value value;
         if(instance->fields.get(name, value))
         {
-            stack[stack.size()-static_cast<size_t>(argCount)-1] = value;
+            stackTop[-argCount-1] = value;
             return callValue(value, argCount);
         }
 
@@ -888,7 +878,7 @@ bool VM::invoke(ObjString* name, int argCount)
             return false;
         }
 
-        stack[stack.size()-static_cast<size_t>(argCount)-1] = member.value;
+        stackTop[-argCount-1] = member.value;
         return callValue(member.value, argCount);
     }
 
@@ -907,7 +897,7 @@ bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
 
     if(member.isStatic || !is_closure(member.value))
     {
-        stack[stack.size()-static_cast<size_t>(argCount)-1] = member.value;
+        stackTop[-argCount-1] = member.value;
         return callValue(member.value, argCount);
     }
 
@@ -983,11 +973,11 @@ void VM::collectGarbage()
 
 void VM::markRoots()
 {
-    for(auto slot: stack)
-        markValue(slot);
+    for(Value* slot=stack.data(); slot!=stackTop; ++slot)
+        markValue(*slot);
     
-    for(auto fr: frames)
-        markObject(static_cast<Obj*>(fr.clos));
+    for(int i=0; i<frameCount; ++i)
+        markObject(static_cast<Obj*>(frames[i].clos));
 
     for(auto upval = openUpvalues; upval!=nullptr; upval = upval->next)
         markObject(static_cast<Obj*>(upval));
@@ -1117,6 +1107,11 @@ void VM::blackenObject(Obj* object)
     case ObjType::NATIVE:
     case ObjType::STRING:
     case ObjType::COMPLEX:
+        break;
+    case ObjType::NONE:
+    case ObjType::OBJ:
+    default:
+        // unreachable
         break;
     }
 }
