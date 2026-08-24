@@ -42,6 +42,47 @@ size_t nextCollectionThreshold(size_t liveBytes)
         : liveBytes * HEAP_GROW_FACTOR;
     return std::max(GC_MIN_THRESHOLD, grown);
 }
+
+bool decodeErrorKind(Value value, ErrorKind& kind)
+{
+    if(!value.is_number())
+        return false;
+
+    const double raw = value.as_number();
+    const double integral = std::floor(raw);
+    if(!std::isfinite(raw) || raw != integral)
+        return false;
+
+    switch(static_cast<int>(integral))
+    {
+    case static_cast<int>(ErrorKind::DOMAIN_ERROR):
+        kind = ErrorKind::DOMAIN_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::RANGE_ERROR):
+        kind = ErrorKind::RANGE_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::TYPE_ERROR):
+        kind = ErrorKind::TYPE_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::INDEX_ERROR):
+        kind = ErrorKind::INDEX_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::IO_ERROR):
+        kind = ErrorKind::IO_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::VALUE_ERROR):
+        kind = ErrorKind::VALUE_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::NAME_ERROR):
+        kind = ErrorKind::NAME_ERROR;
+        return true;
+    case static_cast<int>(ErrorKind::USER_ERROR):
+        kind = ErrorKind::USER_ERROR;
+        return true;
+    default:
+        return false;
+    }
+}
 }
 
 VM::VM():
@@ -66,7 +107,6 @@ VM::~VM()
 Result VM::interpret(const string& src)
 {
     gcEnabled = true;
-    runtimeErrorRaised = false;
 
     resetStack();
 
@@ -128,6 +168,10 @@ Result VM::run()
 
         case OpCode::ADD:
         {
+            if(rejectErrorValue(peek(0), "Can't use an error value in addition.") ||
+               rejectErrorValue(peek(1), "Can't use an error value in addition."))
+                return Result::RUNTIME_ERROR;
+
             if(is_str(peek(0)) && is_str(peek(1)))
                 concat();
             else if(isNumeric(peek(0)) && isNumeric(peek(1)))
@@ -178,8 +222,17 @@ Result VM::run()
             push(Value(false)); break;
         case OpCode::POP:
             pop(); break;
+        case OpCode::POP_UNHANDLED:
+            if(rejectErrorValue(peek(0), "Unhandled error result."))
+                return Result::RUNTIME_ERROR;
+            pop();
+            break;
         case OpCode::EQUAL:
         {
+            if(rejectErrorValue(peek(0), "Can't compare an error value directly.") ||
+               rejectErrorValue(peek(1), "Can't compare an error value directly."))
+                return Result::RUNTIME_ERROR;
+
             Value b = pop();
             Value a = pop();
             push(Value(a==b));
@@ -188,6 +241,8 @@ Result VM::run()
 
         case OpCode::NEGATE:
         {
+            if(rejectErrorValue(peek(0), "Can't negate an error value."))
+                return Result::RUNTIME_ERROR;
             if(!isNumeric(peek(0)))
             {
                 runtimeError("Operand must be a number or complex number.");
@@ -209,6 +264,9 @@ Result VM::run()
             }
             break;
         }
+        case OpCode::IS_ERROR:
+            push(Value(is_error_result(peek(0))));
+            break;
         case OpCode::RETURN:
         {
             Value result = pop();
@@ -218,6 +276,48 @@ Result VM::run()
 
             if(frameCount == 0)
                 return Result::OK;
+
+            push(result);
+            frame = &frames[frameCount-1];
+            break;
+        }
+        case OpCode::FAIL:
+        {
+            Value payload = pop();
+            Value messageValue = pop();
+            Value kindValue = pop();
+
+            if(rejectErrorValue(kindValue, "Can't use an error value as an error kind.") ||
+               rejectErrorValue(messageValue, "Can't use an error value as an error message."))
+                return Result::RUNTIME_ERROR;
+
+            ErrorKind kind;
+            if(!decodeErrorKind(kindValue, kind))
+            {
+                runtimeError("Error kind must be one of the built-in error kind constants.");
+                return Result::RUNTIME_ERROR;
+            }
+            if(!is_str(messageValue))
+            {
+                runtimeError("Error message must be a string.");
+                return Result::RUNTIME_ERROR;
+            }
+
+            const std::string message = as_string(messageValue);
+            Value result = makeErrorResult(kind, message, payload);
+            closeUpvalues(frame->slots);
+            stackTop = frame->slots;
+            frameCount--;
+
+            if(frameCount == 0)
+            {
+                const auto* error = as_error_result(result);
+                const auto kindName = errorKindName(error->kind);
+                const auto& errorMessage = error->message->str();
+                runtimeError("Unhandled error result. Original error [{}]: {}",
+                    kindName, errorMessage);
+                return Result::RUNTIME_ERROR;
+            }
 
             push(result);
             frame = &frames[frameCount-1];
@@ -347,6 +447,8 @@ Result VM::run()
         {
             Value receiver = peek(0);
             ObjString* name = read_str(frame);
+            if(rejectErrorValue(receiver, "Can't access a property on an error value."))
+                return Result::RUNTIME_ERROR;
             if(is_instance(receiver))
             {
                 if(!getInstanceProperty(as_instance(receiver), name))
@@ -367,6 +469,8 @@ Result VM::run()
         {
             Value receiver = peek(1);
             ObjString* name = read_str(frame);
+            if(rejectErrorValue(receiver, "Can't assign a property on an error value."))
+                return Result::RUNTIME_ERROR;
             if(is_instance(receiver))
             {
                 auto instance = as_instance(receiver);
@@ -454,7 +558,6 @@ Result VM::run()
 
 template<typename... Args>
 void VM::runtimeError(std::string_view fmt, Args&&... args) {
-    runtimeErrorRaised = true;
     auto message = std::vformat(fmt, std::make_format_args(std::forward<Args>(args)...));
 
     std::cerr << "[runtime error] " << message << '\n';
@@ -474,9 +577,44 @@ void VM::runtimeError(std::string_view fmt, Args&&... args) {
     resetStack();
 }
 
-void VM::reportRuntimeError(std::string_view message)
+Value VM::makeErrorResult(ErrorKind kind, std::string_view message, Value payload)
 {
-    runtimeError(message);
+    const bool payloadRooted = payload.is_obj();
+    if(payloadRooted)
+        push(payload);
+
+    ObjString* msg = copyString(*this, message);
+    push(Value(msg));
+
+    ObjErrorResult* result = nullptr;
+    try
+    {
+        result = makeObj<ObjErrorResult>(*this, kind, msg, payload);
+    }
+    catch(...)
+    {
+        pop();
+        if(payloadRooted)
+            pop();
+        throw;
+    }
+
+    pop();
+    if(payloadRooted)
+        pop();
+    return Value(result);
+}
+
+bool VM::rejectErrorValue(Value value, std::string_view context)
+{
+    if(!is_error_result(value))
+        return false;
+
+    auto* error = as_error_result(value);
+    const auto kind = errorKindName(error->kind);
+    const auto& message = error->message->str();
+    runtimeError("{} Original error [{}]: {}", context, kind, message);
+    return true;
 }
 
 void VM::resetStack()
@@ -510,6 +648,10 @@ void VM::freeObj(Obj* object)
     case ObjType::CLASS:
         size = saturatingAdd(sizeof(ObjClass), objectExtraBytes(object));
         delete static_cast<ObjClass*>(object);
+        break;
+    case ObjType::ERROR_RESULT:
+        size = sizeof(ObjErrorResult);
+        delete static_cast<ObjErrorResult*>(object);
         break;
     case ObjType::INSTANCE:
         size = sizeof(ObjInstance);
@@ -554,6 +696,10 @@ void VM::freeObj(Obj* object)
 template<typename Op>
 bool VM::binaryOp(Op op)
 {
+    if(rejectErrorValue(peek(0), "Can't use an error value in arithmetic.") ||
+       rejectErrorValue(peek(1), "Can't use an error value in arithmetic."))
+        return false;
+
     if(!peek(0).is_number() || !peek(1).is_number()) {
         runtimeError("Operands must be real numbers.");
         return false;
@@ -570,6 +716,10 @@ bool VM::complexBinaryOp(Op op)
 {
     const Value right = peek(0);
     const Value left = peek(1);
+
+    if(rejectErrorValue(right, "Can't use an error value in arithmetic.") ||
+       rejectErrorValue(left, "Can't use an error value in arithmetic."))
+        return false;
 
     if(!isNumeric(left) || !isNumeric(right))
     {
@@ -598,6 +748,9 @@ bool VM::complexBinaryOp(Op op)
 
 bool VM::callValue(Value callee, int argCount)
 {
+    if(rejectErrorValue(callee, "Can't call an error value."))
+        return false;
+
     if(callee.is_obj())
     {
         switch (objType(callee))
@@ -614,14 +767,14 @@ bool VM::callValue(Value callee, int argCount)
                 return false;
             }
 
-            Value result = native->func(
+            NativeResult result = native->func(
                 *this,
                 argCount,
                 stackTop - argCount);
-            if(runtimeErrorRaised)
-                return false;
             stackTop -= argCount + 1;
-            push(result);
+            push(result.ok
+                ? result.value
+                : makeErrorResult(result.error.kind, result.error.message, result.error.payload));
             return true;
         }
         case ObjType::CLOSURE:
@@ -849,6 +1002,8 @@ bool VM::bindSuperMethod(ObjClass* klass, ObjString* name)
 bool VM::invoke(ObjString* name, int argCount)
 {
     Value receiver = peek(argCount);
+    if(rejectErrorValue(receiver, "Can't invoke a method on an error value."))
+        return false;
 
     if(is_instance(receiver))
     {
@@ -1077,6 +1232,13 @@ void VM::blackenObject(Obj* object)
         markObject(klass->name);
         markObject(static_cast<Obj*>(klass->superclass));
         markMemberTable(klass->members);
+        break;
+    }
+    case ObjType::ERROR_RESULT:
+    {
+        auto error = static_cast<ObjErrorResult*>(object);
+        markObject(error->message);
+        markValue(error->payload);
         break;
     }
     case ObjType::INSTANCE:

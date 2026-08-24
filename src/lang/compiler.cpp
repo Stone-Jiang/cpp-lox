@@ -260,6 +260,10 @@ void Compiler::statement()
     {
         contStmt();
     }
+    else if(match(TokenType::FAIL))
+    {
+        failStmt();
+    }
     else if(match(TokenType::RETURN))
     {
         returnStmt();
@@ -583,7 +587,27 @@ void Compiler::expressionStmt()
 {
     expression();
     consume(TokenType::SEMICOLON, "Expect ';' after expression.");
-    emit(OpCode::POP);
+    emit(OpCode::POP_UNHANDLED);
+}
+
+void Compiler::failStmt()
+{
+    if(current->ftype == FunctionType::SCRIPT)
+        error("Can't fail from top-level code.");
+
+    consume(TokenType::IDENTIFIER, "Expect error kind after 'fail'.");
+    emit(OpCode::CONSTANT, errorKindConstant(parser.prev));
+
+    consume(TokenType::COMMA, "Expect ',' after error kind.");
+    expression();
+
+    if(match(TokenType::COMMA))
+        expression();
+    else
+        emit(OpCode::NIL);
+
+    consume(TokenType::SEMICOLON, "Expect ';' after fail statement.");
+    emit(OpCode::FAIL);
 }
 
 void Compiler::forStmt()
@@ -945,6 +969,19 @@ void Compiler::or_(bool)
     patchJump(endJump);
 }
 
+void Compiler::else_(bool)
+{
+    emit(OpCode::IS_ERROR);
+    int keepLeftJump = emitJump(OpCode::JUMP_IF_FALSE);
+    emit(OpCode::POP);
+    emit(OpCode::POP);
+    parsePrec(Prec::ASSIGNMENT);
+    int doneJump = emitJump(OpCode::JUMP);
+    patchJump(keepLeftJump);
+    emit(OpCode::POP);
+    patchJump(doneJump);
+}
+
 void Compiler::dot(bool canAssign)
 {
     consume(TokenType::IDENTIFIER, "Expect property name after '.'.");
@@ -1040,6 +1077,36 @@ MethodContext Compiler::methodContext() const
     return MethodContext::NONE;
 }
 
+u8 Compiler::errorKindConstant(Token kind)
+{
+    const std::string_view name(kind.start, static_cast<size_t>(kind.len));
+
+    ErrorKind errorKind;
+    if(name == "DOMAIN" || name == "DOMAIN_ERROR")
+        errorKind = ErrorKind::DOMAIN_ERROR;
+    else if(name == "RANGE" || name == "RANGE_ERROR")
+        errorKind = ErrorKind::RANGE_ERROR;
+    else if(name == "TYPE" || name == "TYPE_ERROR")
+        errorKind = ErrorKind::TYPE_ERROR;
+    else if(name == "INDEX" || name == "INDEX_ERROR")
+        errorKind = ErrorKind::INDEX_ERROR;
+    else if(name == "IO" || name == "IO_ERROR")
+        errorKind = ErrorKind::IO_ERROR;
+    else if(name == "VALUE" || name == "VALUE_ERROR")
+        errorKind = ErrorKind::VALUE_ERROR;
+    else if(name == "NAME" || name == "NAME_ERROR")
+        errorKind = ErrorKind::NAME_ERROR;
+    else if(name == "USER" || name == "USER_ERROR")
+        errorKind = ErrorKind::USER_ERROR;
+    else
+    {
+        error("Unknown error kind.");
+        return 0;
+    }
+
+    return makeConstant(Value(static_cast<double>(static_cast<u8>(errorKind))));
+}
+
 u8 Compiler::argumentList()
 {
     u8 argCount = 0;
@@ -1084,6 +1151,7 @@ void Compiler::synchronize()
         case TokenType::WHILE:
         case TokenType::PRINT:
         case TokenType::RETURN:
+        case TokenType::FAIL:
         case TokenType::BREAK:
         case TokenType::CONTINUE:
             return;
@@ -1123,6 +1191,7 @@ consteval Rules RulesMaker::make() noexcept
     set(TokenType::NUMBER, &Compiler::number, nullptr, Prec::NONE);
     set(TokenType::IMAGINARY, &Compiler::imaginary, nullptr, Prec::NONE);
     set(TokenType::AND, nullptr, &Compiler::and_, Prec::AND);
+    set(TokenType::ELSE, nullptr, &Compiler::else_, Prec::ASSIGNMENT);
     set(TokenType::FALSE, &Compiler::literal, nullptr, Prec::NONE);
     set(TokenType::NIL, &Compiler::literal, nullptr, Prec::NONE);
     set(TokenType::OR, nullptr, &Compiler::or_, Prec::OR);

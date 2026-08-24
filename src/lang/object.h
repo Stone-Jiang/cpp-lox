@@ -15,6 +15,7 @@ enum class ObjType
     OBJ, // for debug only
     BOUND_METHOD, 
     CLASS, CLOSURE, 
+    ERROR_RESULT,
     FUNCTION, 
     INSTANCE, 
     NATIVE, 
@@ -116,6 +117,16 @@ struct ObjClass: Obj
         Obj(owner, ObjType::CLASS), name(name), members(owner) {}
 };
 
+struct ObjErrorResult: Obj
+{
+    ErrorKind kind = ErrorKind::USER_ERROR;
+    ObjString* message = nullptr;
+    Value payload;
+
+    ObjErrorResult(VM* owner, ErrorKind kind, ObjString* message, Value payload = Value()):
+        Obj(owner, ObjType::ERROR_RESULT), kind(kind), message(message), payload(payload) {}
+};
+
 struct ObjInstance: Obj
 {
     ObjClass* klass = nullptr;
@@ -149,6 +160,8 @@ bool is_closure(const Value& value);
 ObjClosure* as_closure(const Value& value);
 bool is_class(const Value& value);
 ObjClass* as_class(const Value& value);
+bool is_error_result(const Value& value);
+ObjErrorResult* as_error_result(const Value& value);
 bool is_instance(const Value& value);
 ObjInstance* as_instance(const Value& value);
 bool is_bound_meth(const Value& value);

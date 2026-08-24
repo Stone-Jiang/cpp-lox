@@ -21,488 +21,509 @@ std::complex<double> disregardZero(std::complex<double> value)
     };
 }
 
-bool numericValue(const Value& value, std::complex<double>& result)
+bool isFinite(const std::complex<double>& value)
+{
+    return std::isfinite(value.real()) && std::isfinite(value.imag());
+}
+
+NativeResult success(Value value)
+{
+    return NativeResult::success(value);
+}
+
+NativeResult failure(ErrorKind kind, std::string_view message, Value payload = Value())
+{
+    return NativeResult::failure(kind, std::string(message), payload);
+}
+
+NativeResult typeError(std::string_view function, std::string_view expected)
+{
+    return failure(ErrorKind::TYPE_ERROR,
+        std::format("{}() expects {}.", function, expected));
+}
+
+NativeResult valueError(std::string_view function, std::string_view message)
+{
+    return failure(ErrorKind::VALUE_ERROR,
+        std::format("{}() {}.", function, message));
+}
+
+NativeResult domainError(std::string_view function, std::string_view message)
+{
+    return failure(ErrorKind::DOMAIN_ERROR,
+        std::format("{}() {}.", function, message));
+}
+
+NativeResult rangeError(std::string_view function, std::string_view message)
+{
+    return failure(ErrorKind::RANGE_ERROR,
+        std::format("{}() {}.", function, message));
+}
+
+bool realValue(std::string_view function, const Value& value, double& result, NativeResult& error)
+{
+    if(!value.is_number())
+    {
+        error = typeError(function, "a real number");
+        return false;
+    }
+
+    result = value.as_number();
+    if(!std::isfinite(result))
+    {
+        error = valueError(function, "expects a finite real number");
+        return false;
+    }
+
+    return true;
+}
+
+bool numericValue(std::string_view function, const Value& value,
+    std::complex<double>& result, NativeResult& error)
 {
     if(value.is_number())
     {
         result = {value.as_number(), 0.0};
-        return true;
     }
-    if(is_complex(value))
+    else if(is_complex(value))
     {
         result = as_complex(value)->c;
-        return true;
     }
-    return false;
+    else
+    {
+        error = typeError(function, "a number or complex number");
+        return false;
+    }
+
+    if(!isFinite(result))
+    {
+        error = valueError(function, "expects finite numeric input");
+        return false;
+    }
+
+    return true;
 }
 
-Value complexValue(VM& vm, const std::complex<double>& value)
+NativeResult realResult(std::string_view function, double value)
 {
+    if(!std::isfinite(value))
+        return rangeError(function, "produced a non-finite real result");
+
+    return success(Value(disregardZero(value)));
+}
+
+NativeResult complexResult(std::string_view function, VM& vm, const std::complex<double>& value)
+{
+    if(!isFinite(value))
+        return rangeError(function, "produced a non-finite complex result");
+
     const auto normalized = disregardZero(value);
-    return Value(makeObj<ObjComplex>(vm,
-        normalized.real(), normalized.imag()));
+    return success(Value(makeObj<ObjComplex>(vm,
+        normalized.real(), normalized.imag())));
 }
 
-Value clockNative(VM&, int, Value*)
+NativeResult clockNative(VM&, int, Value*)
 {
-    return Value(static_cast<double>(std::clock()) / CLOCKS_PER_SEC);
+    return success(Value(static_cast<double>(std::clock()) / CLOCKS_PER_SEC));
 }
 
-Value sqrtNative(VM& vm, int, Value* args)
+NativeResult sqrtNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("sqrt() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("sqrt", args[0], number, error))
+        return error;
     if(number < 0.0)
-    {
-        vm.reportRuntimeError("sqrt() is undefined for negative real numbers.");
-        return Value();
-    }
+        return domainError("sqrt", "is undefined for negative real numbers");
 
-    return Value(disregardZero(std::sqrt(number)));
+    return realResult("sqrt", std::sqrt(number));
 }
 
-Value sinNative(VM& vm, int, Value* args)
+NativeResult sinNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("sin() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::sin(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("sin", args[0], number, error))
+        return error;
+    return realResult("sin", std::sin(number));
 }
 
-Value cosNative(VM& vm, int, Value* args)
+NativeResult cosNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("cos() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::cos(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("cos", args[0], number, error))
+        return error;
+    return realResult("cos", std::cos(number));
 }
 
-Value tanNative(VM& vm, int, Value* args)
+NativeResult tanNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("tan() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::tan(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("tan", args[0], number, error))
+        return error;
+    return realResult("tan", std::tan(number));
 }
 
-Value asinNative(VM& vm, int, Value* args)
+NativeResult asinNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("sin() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("asin", args[0], number, error))
+        return error;
+    if(number < -1.0 || number > 1.0)
+        return domainError("asin", "is only defined for inputs in [-1, 1]");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::asin(number)));
+    return realResult("asin", std::asin(number));
 }
 
-Value acosNative(VM& vm, int, Value* args)
+NativeResult acosNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("sin() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("acos", args[0], number, error))
+        return error;
+    if(number < -1.0 || number > 1.0)
+        return domainError("acos", "is only defined for inputs in [-1, 1]");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::acos(number)));
+    return realResult("acos", std::acos(number));
 }
 
-Value atanNative(VM& vm, int, Value* args)
+NativeResult atanNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("atan() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::atan(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("atan", args[0], number, error))
+        return error;
+    return realResult("atan", std::atan(number));
 }
 
-Value expNative(VM& vm, int, Value* args)
+NativeResult expNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("exp() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::exp(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("exp", args[0], number, error))
+        return error;
+    return realResult("exp", std::exp(number));
 }
 
-Value powNative(VM& vm, int, Value* args)
+NativeResult powNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number() || !args[1].is_number())
-    {
-        vm.reportRuntimeError("pow() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    double exponent = 0.0;
+    if(!realValue("pow", args[0], number, error) ||
+        !realValue("pow", args[1], exponent, error))
+        return error;
+    if(number < 0.0 && std::floor(exponent) != exponent)
+        return domainError("pow", "is undefined for a negative base with a non-integer exponent");
 
-    const double number = args[0].as_number();
-    const double ind = args[1].as_number();
-    return Value(disregardZero(std::pow(number, ind)));
+    return realResult("pow", std::pow(number, exponent));
 }
 
-Value lnNative(VM& vm, int, Value* args)
+NativeResult lnNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("ln() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("ln", args[0], number, error))
+        return error;
+    if(number <= 0.0)
+        return domainError("ln", "is only defined for positive real numbers");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::log(number)));
+    return realResult("ln", std::log(number));
 }
 
-Value lgNative(VM& vm, int, Value* args)
+NativeResult lgNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("lg() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("lg", args[0], number, error))
+        return error;
+    if(number <= 0.0)
+        return domainError("lg", "is only defined for positive real numbers");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::log10(number)));
+    return realResult("lg", std::log10(number));
 }
 
-Value logNative(VM& vm, int, Value* args)
+NativeResult logNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number() || !args[1].is_number())
-    {
-        vm.reportRuntimeError("log() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    double base = 0.0;
+    if(!realValue("log", args[0], number, error) ||
+        !realValue("log", args[1], base, error))
+        return error;
 
-    const double number = disregardZero(args[0].as_number());
-    const double base = disregardZero(args[1].as_number());
+    number = disregardZero(number);
+    base = disregardZero(base);
 
-    if(number <= 0)
-        vm.reportRuntimeError("log() number cannot be negative or 0.");
-    if(base <= 0)
-        vm.reportRuntimeError("log() base cannot be negative or 0.");
+    if(number <= 0.0)
+        return domainError("log", "number cannot be negative or 0");
+    if(base <= 0.0)
+        return domainError("log", "base cannot be negative or 0");
     if(base == 1.0)
-        vm.reportRuntimeError("log() base cannot be 1.");
+        return domainError("log", "base cannot be 1");
 
-    return Value(disregardZero(std::log(number) / std::log(base)));
+    return realResult("log", std::log(number) / std::log(base));
 }
 
-Value sinhNative(VM& vm, int, Value* args)
+NativeResult sinhNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("sinh() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::sinh(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("sinh", args[0], number, error))
+        return error;
+    return realResult("sinh", std::sinh(number));
 }
 
-Value coshNative(VM& vm, int, Value* args)
+NativeResult coshNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("cosh() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::cosh(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("cosh", args[0], number, error))
+        return error;
+    return realResult("cosh", std::cosh(number));
 }
 
-Value tanhNative(VM& vm, int, Value* args)
+NativeResult tanhNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("tanh() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::tanh(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("tanh", args[0], number, error))
+        return error;
+    return realResult("tanh", std::tanh(number));
 }
 
-Value asinhNative(VM& vm, int, Value* args)
+NativeResult asinhNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("asinh() expects a real number.");
-        return Value();
-    }
-
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::asinh(number)));
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("asinh", args[0], number, error))
+        return error;
+    return realResult("asinh", std::asinh(number));
 }
 
-Value acoshNative(VM& vm, int, Value* args)
+NativeResult acoshNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("acosh() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("acosh", args[0], number, error))
+        return error;
+    if(number < 1.0)
+        return domainError("acosh", "is only defined for inputs >= 1");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::acosh(number)));
+    return realResult("acosh", std::acosh(number));
 }
 
-Value atanhNative(VM& vm, int, Value* args)
+NativeResult atanhNative(VM&, int, Value* args)
 {
-    if(!args[0].is_number())
-    {
-        vm.reportRuntimeError("atanh() expects a real number.");
-        return Value();
-    }
+    NativeResult error;
+    double number = 0.0;
+    if(!realValue("atanh", args[0], number, error))
+        return error;
+    if(number <= -1.0 || number >= 1.0)
+        return domainError("atanh", "is only defined for inputs in (-1, 1)");
 
-    const double number = args[0].as_number();
-    return Value(disregardZero(std::atanh(number)));
+    return realResult("atanh", std::atanh(number));
 }
 
-
-Value sqrtCxNative(VM& vm, int, Value* args)
+NativeResult sqrtCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("sqrt'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("sqrt'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::sqrt(number));
+    return complexResult("sqrt'", vm, std::sqrt(number));
 }
 
-Value realNative(VM&, int, Value* args)
+NativeResult realNative(VM&, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
-    return Value(disregardZero(number.real()));
+    if(!numericValue("real", args[0], number, error))
+        return error;
+    return realResult("real", number.real());
 }
 
-Value imagNative(VM&, int, Value* args)
+NativeResult imagNative(VM&, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
-    return Value(disregardZero(number.imag()));
+    if(!numericValue("imag", args[0], number, error))
+        return error;
+    return realResult("imag", number.imag());
 }
 
-Value absNative(VM&, int, Value* args)
+NativeResult absNative(VM&, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
-    return Value(disregardZero(std::abs(number)));
+    if(!numericValue("abs", args[0], number, error))
+        return error;
+    return realResult("abs", std::abs(number));
 }
 
-Value argNative(VM&, int, Value* args)
+NativeResult argNative(VM&, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
-    return Value(disregardZero(std::arg(number)));
+    if(!numericValue("arg", args[0], number, error))
+        return error;
+    return realResult("arg", std::arg(number));
 }
 
-Value normNative(VM&, int, Value* args)
+NativeResult normNative(VM&, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
-    return Value(disregardZero(std::norm(number)));
+    if(!numericValue("mag", args[0], number, error))
+        return error;
+    return realResult("mag", std::norm(number));
 }
 
-Value conjNative(VM& vm, int, Value* args)
+NativeResult conjNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-        return Value();
+    if(!numericValue("conj", args[0], number, error))
+        return error;
 
     if(args[0].is_number())
-        return args[0];
-    return complexValue(vm, std::conj(number));
+        return success(args[0]);
+    return complexResult("conj", vm, std::conj(number));
 }
 
-Value sinCxNative(VM& vm, int, Value* args)
+NativeResult sinCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("sin'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("sin'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::sin(number));
+    return complexResult("sin'", vm, std::sin(number));
 }
 
-Value cosCxNative(VM& vm, int, Value* args)
+NativeResult cosCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("cos'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("cos'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::cos(number));
+    return complexResult("cos'", vm, std::cos(number));
 }
 
-Value tanCxNative(VM& vm, int, Value* args)
+NativeResult tanCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("tan'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("tan'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::tan(number));
+    return complexResult("tan'", vm, std::tan(number));
 }
 
-Value asinCxNative(VM& vm, int, Value* args)
+NativeResult asinCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("asin'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("asin'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::asin(number));
+    return complexResult("asin'", vm, std::asin(number));
 }
 
-Value acosCxNative(VM& vm, int, Value* args)
+NativeResult acosCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("acos'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("acos'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::acos(number));
+    return complexResult("acos'", vm, std::acos(number));
 }
 
-Value atanCxNative(VM& vm, int, Value* args)
+NativeResult atanCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("atan'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("atan'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::atan(number));
+    return complexResult("atan'", vm, std::atan(number));
 }
 
-Value expCxNative(VM& vm, int, Value* args)
+NativeResult expCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("exp'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("exp'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::exp(number));
+    return complexResult("exp'", vm, std::exp(number));
 }
 
-Value sinhCxNative(VM& vm, int, Value* args)
+NativeResult sinhCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("sin'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("sinh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::sinh(number));
+    return complexResult("sinh'", vm, std::sinh(number));
 }
 
-Value coshCxNative(VM& vm, int, Value* args)
+NativeResult coshCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("cos'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("cosh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::cosh(number));
+    return complexResult("cosh'", vm, std::cosh(number));
 }
 
-Value tanhCxNative(VM& vm, int, Value* args)
+NativeResult tanhCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("tan'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("tanh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::tanh(number));
+    return complexResult("tanh'", vm, std::tanh(number));
 }
 
-Value asinhCxNative(VM& vm, int, Value* args)
+NativeResult asinhCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("sin'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("asinh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::asinh(number));
+    return complexResult("asinh'", vm, std::asinh(number));
 }
 
-Value acoshCxNative(VM& vm, int, Value* args)
+NativeResult acoshCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("cos'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("acosh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::acosh(number));
+    return complexResult("acosh'", vm, std::acosh(number));
 }
 
-Value atanhCxNative(VM& vm, int, Value* args)
+NativeResult atanhCxNative(VM& vm, int, Value* args)
 {
+    NativeResult error;
     std::complex<double> number;
-    if(!numericValue(args[0], number))
-    {
-        vm.reportRuntimeError("tan'() expects a number or complex number.");
-        return Value();
-    }
+    if(!numericValue("atanh'", args[0], number, error))
+        return error;
 
-    return complexValue(vm, std::atanh(number));
+    return complexResult("atanh'", vm, std::atanh(number));
 }
-
-
-
-// -----
 
 constexpr std::array definitions {
     NativeDef{"clock", 0, clockNative},
@@ -548,7 +569,6 @@ constexpr std::array definitions {
     NativeDef{"acosh'", 1, acoshCxNative},
     NativeDef{"atanh'", 1, atanhCxNative},
 };
-
 }
 
 std::span<const NativeDef> nativeDefinitions() noexcept

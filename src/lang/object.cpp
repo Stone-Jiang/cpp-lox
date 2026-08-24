@@ -75,6 +75,16 @@ ObjClass* as_class(const Value& value)
     return static_cast<ObjClass*>(value.as_obj());
 }
 
+bool is_error_result(const Value& value)
+{
+    return isType(value, ObjType::ERROR_RESULT);
+}
+
+ObjErrorResult* as_error_result(const Value& value)
+{
+    return static_cast<ObjErrorResult*>(value.as_obj());
+}
+
 bool is_instance(const Value& value)
 {
     return isType(value, ObjType::INSTANCE);
@@ -148,6 +158,12 @@ std::string objectToString(const Value& value)
         return as_str(value)->str();
     case ObjType::COMPLEX:
         return formatComplex(as_complex(value)->c);
+    case ObjType::ERROR_RESULT:
+    {
+        const auto* error = as_error_result(value);
+        return std::format("<err {}: {}>",
+            errorKindName(error->kind), error->message->str());
+    }
     default:
         return "????";
     }
@@ -185,6 +201,9 @@ void printObject(const Value& value)
         break;
     case ObjType::CLASS:
         printf("<cls %s>", as_class(value)->name->str().c_str());
+        break;
+    case ObjType::ERROR_RESULT:
+        std::printf("%s", objectToString(value).c_str());
         break;
     case ObjType::INSTANCE:
         printf("<ins of cls %s>", as_instance(value)->klass->name->str().c_str());

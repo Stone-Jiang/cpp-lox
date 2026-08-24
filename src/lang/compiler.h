@@ -160,6 +160,7 @@ private:
     void unary(bool);
     void literal(bool);
     void stringy(bool);
+    void else_(bool);
 
     void expression();
     void statement();
@@ -181,6 +182,7 @@ private:
     void forStmt();
     void ifStmt();
     void printStmt();
+    void failStmt();
     void returnStmt();
     void whileStmt();
     void breakStmt();
@@ -212,6 +214,7 @@ private:
     void this_(bool);
     void super_(bool);
     MethodContext methodContext() const;
+    u8 errorKindConstant(Token kind);
 
     u8 argumentList();
     Token syntheticToken(const char* text);

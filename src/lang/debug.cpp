@@ -29,6 +29,8 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return simpleInstruction("OpCode::FALSE", offset);
         case OpCode::POP:
             return simpleInstruction("OpCode::POP", offset);
+        case OpCode::POP_UNHANDLED:
+            return simpleInstruction("OpCode::POP_UNHANDLED", offset);
         case OpCode::GET_LOCAL:
             return byteInstruction("OpCode::GET_LOCAL", chunk, offset);
         case OpCode::SET_LOCAL:
@@ -65,8 +67,10 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
         return simpleInstruction("OpCode::DIVIDE", offset);
             case OpCode::NOT:
         return simpleInstruction("OpCode::NOT", offset);
-            case OpCode::NEGATE:
+        case OpCode::NEGATE:
         return simpleInstruction("OpCode::NEGATE", offset);
+        case OpCode::IS_ERROR:
+            return simpleInstruction("OpCode::IS_ERROR", offset);
 
         case OpCode::PRINT:
             return simpleInstruction("OpCode::PRINT", offset);
@@ -111,6 +115,8 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return simpleInstruction("OpCode::CLOSE_UPVALUE", offset);
         case OpCode::RETURN:
             return simpleInstruction("OpCode::RETURN", offset);
+        case OpCode::FAIL:
+            return simpleInstruction("OpCode::FAIL", offset);
         case OpCode::CLASS:
             return constantInstruction("OpCode::CLASS", chunk, offset);
         case OpCode::INHERIT:

@@ -32,7 +32,6 @@ class VM
     size_t nextGC = 1024*1024;
     bool gcEnabled = false;
     bool isCollecting = false;
-    bool runtimeErrorRaised = false;
 
     std::array<CallFrame, FRAMES_MAX> frames{};
     int frameCount = 0;
@@ -61,7 +60,6 @@ public:
 
     void push(Value val);
     Value pop();
-    void reportRuntimeError(std::string_view message);
 private:
     inline u8 read_byte(CallFrame* frame)
     {
@@ -111,6 +109,8 @@ private:
 
     template<typename... Args>
     void runtimeError(std::string_view fmt, Args&&... args);
+    Value makeErrorResult(ErrorKind kind, std::string_view message, Value payload = Value());
+    bool rejectErrorValue(Value value, std::string_view context);
 
     void resetStack();
 
