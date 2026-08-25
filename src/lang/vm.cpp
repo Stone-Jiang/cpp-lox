@@ -1,4 +1,5 @@
 #include "vm.h"
+#include "../lib/math.h"
 #include <algorithm>
 
 Compiler Compiler::comp{};
@@ -94,6 +95,9 @@ VM::VM():
     initStr = copyString(*this, "init");
 
     for(const auto& nat: natives)
+        defineNative(nat);
+
+    for(const auto& nat: mathNativeDefinitions())
         defineNative(nat);
 }
 

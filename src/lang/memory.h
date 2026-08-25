@@ -91,8 +91,7 @@ public:
         }
     }
 
-    Vector(Vector&& other) noexcept:
-        arr(other.arr), cap(other.cap), sz(other.sz), owner(other.owner)
+    Vector(Vector&& other) noexcept: arr(other.arr), cap(other.cap), sz(other.sz), owner(other.owner)
     {
         other.arr = nullptr;
         other.sz = 0;

@@ -41,13 +41,6 @@ public:
     }
 };
 
-void test()
-{
-    std::cout<<sizeof(int)<<std::endl;
-    std::cout<<sizeof(double)<<std::endl;
-    std::cout<<sizeof(Value)<<std::endl;
-};
-
 int main(int argc, char* argv[])
 {
     VM vm;

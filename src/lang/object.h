@@ -14,7 +14,8 @@ enum class ObjType
 {
     OBJ, // for debug only
     BOUND_METHOD, 
-    CLASS, CLOSURE, 
+    CLASS, 
+    CLOSURE, 
     ERROR_RESULT,
     FUNCTION, 
     INSTANCE, 
@@ -171,6 +172,18 @@ ObjComplex* as_complex(const Value& value);
 
 template <class T>
 concept Objective = std::is_base_of_v<Obj, T>;
+
+template <Objective T>
+bool is(const Value& value)
+{
+    return true;
+}
+
+template <Objective T>
+inline T* as(const Value& value)
+{
+    return static_cast<T*>(value.as_obj());
+}
 
 template <Objective T, typename... Args>
 T* makeObj(VM& owner, Args&&... args)
