@@ -75,8 +75,6 @@ public:
     size_t index() const;
     void clear();
     void swap(Value& other);
-
-    std::string to_string() const;
     
     bool operator==(const Value& other) const;
     bool operator==(double val) const;
@@ -84,7 +82,8 @@ public:
     bool operator==(std::monostate) const;
 };
 
-std::string objectToString(const Value& value);
+std::string to_string(const Value& value);
+std::string to_string(const Obj* obj);
 void printValue(const Value& value);
 
 class ValueArray

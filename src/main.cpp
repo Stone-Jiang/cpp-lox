@@ -33,6 +33,8 @@ public:
             std::cout<<">> ";
             if(!getline(std::cin, line))
                 break;
+            if(line.substr(0,2)=="-q")
+                break;
             if(line.substr(0,2)=="-r")
                 return process(vm, line.substr(3, line.size()));
             vm.interpret(line);

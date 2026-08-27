@@ -13,6 +13,11 @@ bool isNumeric(const Value& value)
     return value.is_number() || is<ObjComplex>(value);
 }
 
+bool isFalsy(Value value)
+{
+    return value.is_nil() || (value.is_bool() && !value.as_bool());
+}
+
 complex<double> asComplexNumber(const Value& value)
 {
     return value.is_number()? 
@@ -32,18 +37,19 @@ size_t objectExtraBytes(const Obj* object)
     {
     case ObjType::STRING:
         return saturatingAdd(static_cast<const ObjString*>(object)->chars.capacity(), 1);
+    case ObjType::ARRAY:
+        return 0;
     default:
         return 0;
     }
 }
 
-size_t nextCollectionThreshold(size_t liveBytes)
+size_t nextCollectionThresh(size_t liveBytes)
 {
     const size_t max = std::numeric_limits<size_t>::max();
-    const size_t grown = liveBytes > max / HEAP_GROW_FACTOR
-        ? max
-        : liveBytes * HEAP_GROW_FACTOR;
-    return std::max(GC_MIN_THRESHOLD, grown);
+    const size_t grown = liveBytes > max / HEAP_GROW_FACTOR? 
+        max: liveBytes * HEAP_GROW_FACTOR;
+    return std::max(GC_MIN_THRESH, grown);
 }
 
 bool decodeErrorKind(Value value, ErrorKind& kind)
@@ -87,6 +93,55 @@ bool decodeErrorKind(Value value, ErrorKind& kind)
     }
 }
 }
+
+NormalIndexInfo normalIndex(const Value& value, size_t length)
+{
+    if(!value.is_number())
+        return {0, IndexResult::NOT_NUMBER};
+
+    const double raw = value.as_number();
+    if(!std::isfinite(raw))
+        return {0, IndexResult::NOT_FINITE};
+    if(std::trunc(raw)!=raw)
+        return {0, IndexResult::NOT_INTEGRAL};
+    if(std::abs(raw)>MAX_INDEX)
+        return {0, IndexResult::NOT_SAFE};
+    
+    const i64 index = static_cast<i64>(raw);
+
+    if(index>=0)
+    {
+        const size_t pos = static_cast<size_t>(index);
+        if(pos>=length)
+            return {0, IndexResult::OUT_OF_RANGE}; 
+        return {pos, IndexResult::OK};
+    }
+    else
+    {
+        const size_t dist = static_cast<size_t>(-index);
+        if(dist>length)
+            return {0, IndexResult::OUT_OF_RANGE};
+        return {length-dist, IndexResult::OK};
+    }
+}
+
+class TemporaryRootGuard
+{
+    VM& vm;
+    Obj* prev;
+public:
+    TemporaryRootGuard(VM& vm, Obj* obj): vm(vm), prev(vm.temporaryRoot)
+    {
+        vm.temporaryRoot = obj;
+    }
+    ~TemporaryRootGuard()
+    {
+        vm.temporaryRoot = prev;
+    }
+
+    TemporaryRootGuard(const TemporaryRootGuard& other) = delete;
+    TemporaryRootGuard& operator=(const TemporaryRootGuard& other) = delete;
+};
 
 VM::VM():
     globals(this), strings(this), grayStack(this)
@@ -174,8 +229,8 @@ Result VM::run()
 
         case OpCode::ADD:
         {
-            if(rejectErrorValue(peek(0), "Can't use an error value in addition.") ||
-                rejectErrorValue(peek(1), "Can't use an error value in addition."))
+            if(rejectError(peek(0), "Can't use an error value in addition.") ||
+                rejectError(peek(1), "Can't use an error value in addition."))
                 return Result::RUNTIME_ERROR;
 
             if(is<ObjString>(peek(0)) && is<ObjString>(peek(1)))
@@ -217,7 +272,10 @@ Result VM::run()
             if(!binaryOp([](double a, double b) {return a<b;}))
                 return Result::RUNTIME_ERROR;
             break;
-
+        case OpCode::APPROX:
+            if(!binaryOp([](double a, double b) {return std::abs(a-b)<ZERO_EPSILON;}))
+                return Result::RUNTIME_ERROR;
+            break;
         case OpCode::NOT:
             push(Value(isFalsy(pop()))); break;
         case OpCode::NIL:
@@ -229,14 +287,14 @@ Result VM::run()
         case OpCode::POP:
             pop(); break;
         case OpCode::POP_UNHANDLED:
-            if(rejectErrorValue(peek(0), "Unhandled error result."))
+            if(rejectError(peek(0), "Unhandled error result."))
                 return Result::RUNTIME_ERROR;
             pop();
             break;
         case OpCode::EQUAL:
         {
-            if(rejectErrorValue(peek(0), "Can't compare an error value directly.") ||
-               rejectErrorValue(peek(1), "Can't compare an error value directly."))
+            if(rejectError(peek(0), "Can't compare an error value directly.") ||
+               rejectError(peek(1), "Can't compare an error value directly."))
                 return Result::RUNTIME_ERROR;
 
             Value b = pop();
@@ -247,7 +305,7 @@ Result VM::run()
 
         case OpCode::NEGATE:
         {
-            if(rejectErrorValue(peek(0), "Can't negate an error value."))
+            if(rejectError(peek(0), "Can't negate an error value."))
                 return Result::RUNTIME_ERROR;
             if(!isNumeric(peek(0)))
             {
@@ -293,8 +351,8 @@ Result VM::run()
             Value messageValue = pop();
             Value kindValue = pop();
 
-            if(rejectErrorValue(kindValue, "Can't use an error value as an error kind.") ||
-                rejectErrorValue(messageValue, "Can't use an error value as an error message."))
+            if(rejectError(kindValue, "Can't use an error value as an error kind.") ||
+                rejectError(messageValue, "Can't use an error value as an error message."))
                 return Result::RUNTIME_ERROR;
 
             ErrorKind kind;
@@ -453,8 +511,14 @@ Result VM::run()
         {
             Value receiver = peek(0);
             ObjString* name = read_str(frame);
-            if(rejectErrorValue(receiver, "Can't access a property on an error value."))
+            if(rejectError(receiver, "Can't access a property on an error value."))
                 return Result::RUNTIME_ERROR;
+            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            {
+                if(!getNativeProperty(receiver, name))
+                    return Result::RUNTIME_ERROR;
+                break;
+            }
             if(is<ObjInstance>(receiver))
             {
                 if(!getInstanceProperty(as<ObjInstance>(receiver), name))
@@ -475,8 +539,14 @@ Result VM::run()
         {
             Value receiver = peek(1);
             ObjString* name = read_str(frame);
-            if(rejectErrorValue(receiver, "Can't assign a property on an error value."))
+            if(rejectError(receiver, "Can't assign a property on an error value."))
                 return Result::RUNTIME_ERROR;
+            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            {
+                if(!setNativeProperty(receiver, name))
+                    return Result::RUNTIME_ERROR;
+                break;
+            }
             if(is<ObjInstance>(receiver))
             {
                 auto instance = as<ObjInstance>(receiver);
@@ -555,11 +625,146 @@ Result VM::run()
             break;
         }
 
+        case OpCode::MAKE_ARRAY:
+        {
+            auto count = read_byte(frame);
+            auto array = makeObj<ObjArray>(*this);
+            TemporaryRootGuard root(*this, array);
+
+            try
+            {
+                array->elements.reserve(count);
+                Value* first = stackTop - count;
+                for (size_t i = 0; i < count; i++)
+                    array->elements.push_back(first[i]);
+            }
+            catch(const std::bad_alloc&)
+            {
+                Value err = makeErrorResult(ErrorKind::CRITICAL_ERROR, "OOM: Not enough memory to make array.", Value());
+                push(err);
+                break;
+            }
+            catch(const std::length_error&)
+            {
+                Value err = makeErrorResult(ErrorKind::CRITICAL_ERROR, "OOM: Array too large.", Value());
+                push(err);
+                break;
+            }
+
+            stackTop -= count;
+            push(Value(array));
+            break;
+        }
+
+        case OpCode::GET_INDEX:
+        {
+            Value index = peek(0);
+            Value receiver = peek(1);
+            
+            if(!is<ObjArray>(receiver))
+            {
+                Value e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays can be indexed.", receiver);
+                pop();
+                pop();
+                push(e);
+                break;
+            }
+
+            auto array = as<ObjArray>(receiver);
+            auto len = array->len();
+            auto res = normalIndex(index, len);
+
+            if(res.result!=IndexResult::OK)
+            {
+                Value e = makeIndexError(index, len, res.result);
+                pop();
+                pop();
+                push(e);
+                break;
+            }
+
+            Value e = array->elements[res.index];
+        
+            pop();
+            pop();
+            push(e);
+            break;
+        }
+
+        case OpCode::SET_INDEX:
+        {
+            Value val = peek(0);
+            Value index = peek(1);
+            Value receiver = peek(2);
+
+            if (!is<ObjArray>(receiver))
+            {
+                Value e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays can be indexed.", receiver);
+                pop();
+                pop();
+                pop();
+                push(e);
+                break;
+            }
+
+            auto array = as<ObjArray>(receiver);
+            auto res = normalIndex(index, array->len());
+
+            if(res.result!=IndexResult::OK)
+            {
+                Value e = makeIndexError(index, array->len(), res.result);
+                pop();
+                pop();
+                pop();
+                push(e);
+                break;
+            }
+
+            array->elements[res.index] = val;
+
+            pop();
+            pop();
+            pop();
+            push(val);
+            break;
+        }
+
         default:
             runtimeError("Unknown opcode {}.", instruction);
             return Result::RUNTIME_ERROR;
         }
     }
+}
+
+size_t VM::stackSize() const
+{
+    return static_cast<size_t>(stackTop - stack.data());
+}
+
+void VM::resetStack()
+{
+    closeUpvalues(stack.data());
+    openUpvalues = nullptr;
+    frameCount = 0;
+    stackTop = stack.data();
+}
+
+Value VM::peek(int dist)
+{
+    if(dist < 0 || static_cast<size_t>(dist) >= stackSize())
+        throw std::overflow_error("access out of bounds");
+    return stackTop[-1 - dist];
+} 
+
+void VM::concat()
+{
+    auto* b = as<ObjString>(peek(0));
+    auto* a = as<ObjString>(peek(1));
+    auto* result = copyString(*this, a->str() + b->str());
+
+    pop();
+    pop();
+    push(Value(result));
 }
 
 template<typename... Args>
@@ -611,7 +816,7 @@ Value VM::makeErrorResult(ErrorKind kind, std::string_view message, Value payloa
     return Value(result);
 }
 
-bool VM::rejectErrorValue(Value value, std::string_view context)
+bool VM::rejectError(Value value, std::string_view context)
 {
     if(!is<ObjError>(value))
         return false;
@@ -623,12 +828,24 @@ bool VM::rejectErrorValue(Value value, std::string_view context)
     return true;
 }
 
-void VM::resetStack()
+Value VM::makeIndexError(Value index, size_t length, IndexResult reason)
 {
-    closeUpvalues(stack.data());
-    openUpvalues = nullptr;
-    frameCount = 0;
-    stackTop = stack.data();
+    switch (reason)
+    {
+    case IndexResult::NOT_NUMBER:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, "Array index must be an integral number.", index);
+    case IndexResult::NOT_FINITE:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, "Array index must be finite.", index);
+    case IndexResult::NOT_INTEGRAL:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, "Array index must be integral.", index);
+    case IndexResult::NOT_SAFE:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, "Array index is outside the integer range.", index);
+    case IndexResult::OUT_OF_RANGE:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, std::format("Array index out of range for length {}.", length), index);
+    case IndexResult::OK:
+    default:
+        return Value();
+    }
 }
 
 void VM::freeObjs()
@@ -689,21 +906,25 @@ void VM::freeObj(Obj* object)
         break;
     case ObjType::COMPLEX:
         size = sizeof(ObjComplex);
-        delete static_cast<ObjComplex*>(object);
+        delete as<ObjComplex>(object);
+        break;
+    case ObjType::ARRAY:
+        size = sizeof(ObjArray);
+        delete as<ObjArray>(object);
         break;
     default:
         delete object;
         break;
     }
 
-    trackAllocation(owner, size, 0);
+    trackAlloc(owner, size, 0);
 }
 
 template<typename Op>
 bool VM::binaryOp(Op op)
 {
-    if(rejectErrorValue(peek(0), "Can't use an error value in arithmetic.") ||
-       rejectErrorValue(peek(1), "Can't use an error value in arithmetic."))
+    if(rejectError(peek(0), "Can't use an error value in arithmetic.") ||
+       rejectError(peek(1), "Can't use an error value in arithmetic."))
         return false;
 
     if(!peek(0).is_number() || !peek(1).is_number()) {
@@ -723,8 +944,8 @@ bool VM::complexBinaryOp(Op op)
     const Value right = peek(0);
     const Value left = peek(1);
 
-    if(rejectErrorValue(right, "Can't use an error value in arithmetic.") ||
-       rejectErrorValue(left, "Can't use an error value in arithmetic."))
+    if(rejectError(right, "Can't use an error value in arithmetic.") ||
+       rejectError(left, "Can't use an error value in arithmetic."))
         return false;
 
     if(!isNumeric(left) || !isNumeric(right))
@@ -754,7 +975,7 @@ bool VM::complexBinaryOp(Op op)
 
 bool VM::callValue(Value callee, int argCount)
 {
-    if(rejectErrorValue(callee, "Can't call an error value."))
+    if(rejectError(callee, "Can't call an error value."))
         return false;
 
     if(callee.is_obj())
@@ -1008,8 +1229,11 @@ bool VM::bindSuperMethod(ObjClass* klass, ObjString* name)
 bool VM::invoke(ObjString* name, int argCount)
 {
     Value receiver = peek(argCount);
-    if(rejectErrorValue(receiver, "Can't invoke a method on an error value."))
+    if(rejectError(receiver, "Can't invoke a method on an error value."))
         return false;
+
+    if(receiver.is_obj() && hasNativeType(objType(receiver)))
+        return invokeNativeMethod(receiver, name, argCount);
 
     if(is<ObjInstance>(receiver))
     {
@@ -1045,6 +1269,96 @@ bool VM::invoke(ObjString* name, int argCount)
 
     runtimeError("Only instances and classes have methods.");
     return false;
+}
+
+bool VM::getNativeProperty(Value receiver, ObjString* name)
+{
+    const auto* property = findNativeProperty(
+        objType(receiver), name->str());
+
+    NativeResult result = property != nullptr
+        ? property->getter(*this, receiver)
+        : NativeResult::failure(
+            ErrorKind::NAME_ERROR,
+            std::format(
+                "Native value has no readable attribute '{}'.",
+                name->str()),
+            receiver);
+
+    Value output = result.ok
+        ? result.value
+        : makeErrorResult(
+            result.error.kind,
+            result.error.message,
+            result.error.payload);
+
+    pop();
+    push(output);
+    return true;
+}
+
+bool VM::setNativeProperty(Value receiver, ObjString* name)
+{
+    Value error = makeErrorResult(
+        ErrorKind::TYPE_ERROR,
+        std::format(
+            "Native attribute '{}' is read-only.",
+            name->str()),
+        receiver);
+
+    pop();
+    pop();
+    push(error);
+    return true;
+}
+
+bool VM::invokeNativeMethod(Value receiver, ObjString* name, int argCount)
+{
+    const auto* method = findNativeMethod(
+        objType(receiver), name->str());
+
+    if(method == nullptr)
+    {
+        Value error = makeErrorResult(
+            ErrorKind::NAME_ERROR,
+            std::format(
+                "Native value has no method '{}'.",
+                name->str()),
+            receiver);
+        stackTop -= argCount + 1;
+        push(error);
+        return true;
+    }
+
+    if(argCount != method->arity)
+    {
+        Value error = makeErrorResult(
+            ErrorKind::TYPE_ERROR,
+            std::format(
+                "Method '{}()' expects {} arguments but got {}.",
+                name->str(), method->arity, argCount),
+            receiver);
+        stackTop -= argCount + 1;
+        push(error);
+        return true;
+    }
+
+    NativeResult result = method->function(
+        *this,
+        receiver,
+        argCount,
+        stackTop - argCount);
+
+    Value output = result.ok
+        ? result.value
+        : makeErrorResult(
+            result.error.kind,
+            result.error.message,
+            result.error.payload);
+
+    stackTop -= argCount + 1;
+    push(output);
+    return true;
 }
 
 bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
@@ -1111,7 +1425,7 @@ void VM::collectGarbage()
         removeWhite(strings);
         sweep();
 
-        nextGC = nextCollectionThreshold(bytesAlloc);
+        nextGC = nextCollectionThresh(bytesAlloc);
     }
     catch(...)
     {
@@ -1227,22 +1541,22 @@ void VM::blackenObject(Obj* object)
     {
     case ObjType::BOUND_METHOD:
     {
-        auto bound = static_cast<ObjBoundMethod*>(object);
+        auto bound = as<ObjBoundMethod>(object);
         markValue(bound->receiver);
-        markObject(static_cast<Obj*>(bound->method));
+        markObject(as<Obj>(bound->method));
         break;
     }
     case ObjType::CLASS:
     {
-        auto klass = static_cast<ObjClass*>(object);
+        auto klass = as<ObjClass>(object);
         markObject(klass->name);
-        markObject(static_cast<Obj*>(klass->superclass));
+        markObject(as<Obj>(klass->superclass));
         markMemberTable(klass->members);
         break;
     }
     case ObjType::ERROR:
     {
-        auto error = static_cast<ObjError*>(object);
+        auto error = as<ObjError>(object);
         markObject(error->message);
         markValue(error->payload);
         break;
@@ -1272,12 +1586,19 @@ void VM::blackenObject(Obj* object)
     case ObjType::UPVALUE:
         markValue(static_cast<ObjUpvalue*>(object)->closed);
         break;
+    case ObjType::ARRAY:
+    {
+        auto arr = as<ObjArray>(object);
+        for(const Value& e: arr->elements)
+            markValue(e);
+        break;
+    }
     case ObjType::NATIVE:
     case ObjType::STRING:
     case ObjType::COMPLEX:
         break;
     case ObjType::OBJ:
-    default:
+    case ObjType::NONE:
         // unreachable
         break;
     }
@@ -1316,7 +1637,6 @@ void VM::sweep()
     }
 }
 
-
 // -------
 
 void prepareAllocation(VM* owner, size_t oldSize, size_t newSize)
@@ -1335,7 +1655,7 @@ void prepareAllocation(VM* owner, size_t oldSize, size_t newSize)
         owner->collectGarbage();
 }
 
-void trackAllocation(VM* owner, size_t oldSize, size_t newSize)
+void trackAlloc(VM* owner, size_t oldSize, size_t newSize)
 {
     if(owner == nullptr || oldSize == newSize)
         return;
@@ -1369,7 +1689,7 @@ void allocObj(VM* owner, Obj* p, size_t size)
 
     p->next = owner->objects;
     owner->objects = p;
-    trackAllocation(owner, 0, allocationSize);
+    trackAlloc(owner, 0, allocationSize);
 }
 
 ObjString* copyString(VM& owner, std::string_view chars)

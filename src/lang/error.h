@@ -12,7 +12,9 @@ enum class ErrorKind : u8
     IO_ERROR,
     VALUE_ERROR,
     NAME_ERROR,
-    USER_ERROR
+    USER_ERROR,
+    CALL_ERROR,
+    CRITICAL_ERROR
 };
 
 inline std::string_view errorKindName(ErrorKind kind) noexcept
@@ -33,6 +35,10 @@ inline std::string_view errorKindName(ErrorKind kind) noexcept
         return "VALUE";
     case ErrorKind::NAME_ERROR:
         return "NAME";
+    case ErrorKind::CALL_ERROR:
+        return "CALL";
+    case ErrorKind::CRITICAL_ERROR:
+        return "CRITICAL";
     case ErrorKind::USER_ERROR:
         return "USER";
     }

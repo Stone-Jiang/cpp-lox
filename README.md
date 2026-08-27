@@ -4,6 +4,7 @@ The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string inter
 
 ## Requirements and Building
 
+- Probably a 64-bit machine (not tested on 32-bit machine)
 - Python 3 (for playground and incremental build script)
 - A C++ **20** C++ compiler available as `g++`, `clang++`, or `MSVC`.
 
@@ -69,6 +70,7 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 - Apostrophe-suffixed functions such as `sqrt'`, `sin'`, and `acos'` accept complex input. Apostrophes are valid identifier characters for this purpose.
 - `real`, `imag`, `abs`, `arg`, `mag`, and `conj` expose common complex-number operations.
 - Native math functions validate types, domains, ranges, and finite results instead of silently passing invalid results through the VM.
+- The numeric system directly uses C++ library functions with the same behavior, meaning that mathematically true expressions like `sin(1)/cos(1)==tan(1)` might evaluate to false. The only small change is that a value near zero (by 1e-11) is approximated to zero.
 
 #### Error values and recovery
 
@@ -124,6 +126,98 @@ Static methods participate in inherited member lookup. Instance methods remain b
 
 The `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
 
+#### Arrays
+
+Arrays are dynamically sized, mutable objects whose elements remain dynamically typed. Whitespace is insignificant in literals, and a trailing comma is allowed.
+
+```
+var empty = [];
+var values = [1, "two", true, nil];
+var trailing = [1, 2, 3,];
+var nested = [[1, 2], [3, 4], []];
+```
+
+Array variables have reference semantics. Assignment aliases the same array rather than copying its elements:
+
+```
+var a = [1, 2, 3];
+var b = a;
+
+b[0] = 10;
+print a; // [10, 2, 3]
+```
+
+Indexes must be finite integral numbers. Integral floating-point values such as `1.0` are accepted, and negative indexes count backward from the end. Invalid or out-of-range indexes produce an `INDEX` error value.
+
+```
+var a = [10, 20, 30];
+
+print a[1.0]; // 20
+print a[-1];  // 30
+print a[-3];  // 10
+
+a[-1] = 99;
+print a; // [10, 20, 99]
+
+print a[10] else "missing"; // missing
+```
+
+The read-only `len` attribute reports the current number of elements. Capacity and other storage details remain internal to the VM.
+
+```
+var a = [1, 2];
+print a.len; // 2
+```
+
+Arrays currently provide these mutating native methods:
+
+- `push(value)` appends a value and returns `nil`.
+- `pop()` removes and returns the final element; popping an empty array produces an `INDEX` error.
+- `insert(index, value)` inserts before the selected position and returns `nil`. Position `len` appends, and negative positions count backward from the end.
+- `clear()` removes every element and returns `nil`.
+
+```
+var a = [1, 3];
+
+a.insert(1, 2);
+a.push(4);
+print a;       // [1, 2, 3, 4]
+print a.pop(); // 4
+
+a.clear();
+print a.len;   // 0
+```
+
+`copy()` explicitly creates a new outer array. The copy is shallow: nested arrays and other object elements remain shared references.
+
+```
+var inner = [1];
+var a = [inner, 2];
+var b = a.copy();
+
+b[1] = 3;
+print a; // [[1], 2]
+print b; // [[1], 3]
+
+b[0].push(4);
+print a; // [[1, 4], 2]
+```
+
+Pushing an array directly into itself is rejected with a `VALUE` error, including through an alias. Use `copy()` when a snapshot of the current outer array is intended:
+
+```
+var a = [1, 2, 3];
+var alias = a;
+
+print a.push(a) else "self-reference rejected";
+print a.push(alias) else "alias rejected";
+
+a.push(a.copy());
+print a; // [1, 2, 3, [1, 2, 3]]
+```
+
+Arrays participate in garbage-collector tracing: objects stored only inside a reachable array remain alive. Ordinary assignment, argument passing, and return values continue to share the same array object unless `copy()` is called explicitly.
+
 ## Playground
 
 The local web playground provides a source editor, program output, and a persistent REPL. It uses the existing Craft executable, so build the project before starting the playground.
@@ -153,12 +247,10 @@ Then open <http://127.0.0.1:8765> in a browser.
 
 #### Server options
 
-By default, the server uses `main.exe`, binds to `127.0.0.1`, and listens on
-port `8765`. A different executable or port can be selected when starting it:
+By default, the server uses `main.exe`, binds to `127.0.0.1`, and listens on port `8765`. A different executable or port can be selected when starting it:
 
 ```sh
 python playground/server.py --exe debug.exe --port 9000
 ```
 
 Use `python playground/server.py --help` to see all available server options.
-

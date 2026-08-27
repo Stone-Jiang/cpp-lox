@@ -324,6 +324,8 @@ void Compiler::binary(bool)
         emit(OpCode::LESS); break;
     case TokenType::LESS_EQUAL:
         emit(OpCode::GREATER, OpCode::NOT); break;
+    case TokenType::APPROX_EQUAL:
+        emit(OpCode::APPROX); break;
 
     case TokenType::PLUS:
         emit(OpCode::ADD); break;
@@ -527,7 +529,7 @@ void Compiler::method(bool isStatic)
 
     FunctionType type = isStatic ? FunctionType::STATIC_METHOD : FunctionType::METHOD;
     if(!isStatic &&
-       std::string_view(parser.prev.start, static_cast<size_t>(parser.prev.len)) == "init")
+        std::string_view(parser.prev.start, static_cast<size_t>(parser.prev.len)) == "init")
         type = FunctionType::INIT;
     function_(type);
 
@@ -1162,9 +1164,45 @@ void Compiler::synchronize()
     }
 }
 
+// -----
 
+void Compiler::arrayLit(bool)
+{
+    int count = 0;
+    if(!check(TokenType::RIGHT_SQUARE))
+    {
+        do
+        {
+            if(count==UINT8_MAX)
+                error("Can't have more than 255 elems in array literal.");
+            expression();
+            count++;
+        } while (match(TokenType::COMMA) && !check(TokenType::RIGHT_SQUARE));
+        
+    }
 
-// ----
+    consume(TokenType::RIGHT_SQUARE, "Expect ']' after array elems in literal.");
+    emit(OpCode::MAKE_ARRAY, static_cast<u8>(count));
+}
+
+void Compiler::subscript(bool canAssign)
+{
+    expression();
+    consume(TokenType::RIGHT_SQUARE, "Expect ']' after array index.");
+
+    if (canAssign && match(TokenType::EQUAL))
+    {
+        expression();
+        emit(OpCode::SET_INDEX);
+    }
+    else
+    {
+        emit(OpCode::GET_INDEX);
+    }
+}
+
+// -----
+
 consteval Rules RulesMaker::make() noexcept
 {
     Rules result{};
@@ -1186,6 +1224,7 @@ consteval Rules RulesMaker::make() noexcept
     set(TokenType::GREATER_EQUAL, nullptr, &Compiler::binary, Prec::COMPARISON);
     set(TokenType::LESS, nullptr, &Compiler::binary, Prec::COMPARISON);
     set(TokenType::LESS_EQUAL, nullptr, &Compiler::binary, Prec::COMPARISON);
+    set(TokenType::APPROX_EQUAL, nullptr, &Compiler::binary, Prec::COMPARISON);
     set(TokenType::IDENTIFIER, &Compiler::variable, nullptr, Prec::NONE);
     set(TokenType::STRING, &Compiler::stringy, nullptr, Prec::NONE);
     set(TokenType::NUMBER, &Compiler::number, nullptr, Prec::NONE);
@@ -1198,6 +1237,7 @@ consteval Rules RulesMaker::make() noexcept
     set(TokenType::SUPER, &Compiler::super_, nullptr, Prec::NONE);
     set(TokenType::THIS, &Compiler::this_, nullptr, Prec::NONE);
     set(TokenType::TRUE, &Compiler::literal, nullptr, Prec::NONE);
+    set(TokenType::LEFT_SQUARE, &Compiler::arrayLit, &Compiler::subscript, Prec::CALL);
 
     return result;
 }

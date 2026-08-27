@@ -15,5 +15,6 @@ constexpr int STACK_MAX = FRAMES_MAX * UINT8_COUNT;
 constexpr float MAX_LOAD_FACTOR_F = 0.75;
 constexpr int MAX_LOAD_FACTOR_I = static_cast<int>(MAX_LOAD_FACTOR_F*100);
 constexpr int HEAP_GROW_FACTOR = 2;
-constexpr size_t GC_MIN_THRESHOLD = 1024 * 1024;
+constexpr size_t GC_MIN_THRESH = 1024 * 1024;
 constexpr double ZERO_EPSILON = 1e-11;
+constexpr double MAX_INDEX = 9007199254740991.0;

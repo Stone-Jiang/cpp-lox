@@ -23,6 +23,7 @@ enum class ObjType
     STRING, 
     COMPLEX, 
     UPVALUE,
+    ARRAY,
     NONE // for debug only
 };
 
@@ -151,6 +152,21 @@ struct ObjBoundMethod: Obj
         Obj(owner, basetype), receiver(val), method(c) {}
 };
 
+struct ObjArray: Obj
+{
+    static constexpr ObjType basetype = ObjType::ARRAY;
+    Vector<Value> elements;
+
+    inline size_t len() const
+    {
+        return elements.size();
+    }
+
+    ObjArray(VM* owner): Obj(owner, basetype), elements(owner) {}
+};
+
+
+
 ObjType objType(const Value& value);
 bool isType(const Value& value, ObjType type);
 
@@ -168,8 +184,19 @@ T* as(const Value& value)
 {
     if(!value.is_obj())
         throw std::invalid_argument("value cannot be cast");
-
     return static_cast<T*>(value.as_obj());
+}
+
+template <Objective T>
+T* as(Obj* obj)
+{
+    return static_cast<T*>(obj);
+}
+
+template <Objective T>
+const T* as(const Obj* obj)
+{
+    return static_cast<const T*>(obj);
 }
 
 const string& as_string(const Value& value);
@@ -188,9 +215,9 @@ T* makeObj(VM& owner, Args&&... args)
     return object;
 }
 
-void printFunction(const ObjFunction* func);
-void printObject(const Value& value);
+
 void printValue(const Value& value);
+
 bool objectsEqual(Obj* left, Obj* right);
 
 ObjString* copyString(VM& owner, std::string_view chars);

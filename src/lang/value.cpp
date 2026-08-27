@@ -121,19 +121,6 @@ void Value::swap(Value& other)
     std::swap(data, other.data);
 }
 
-std::string Value::to_string() const
-{
-    if(is_nil())
-        return "nil";
-    if(is_number())
-        return std::to_string(as_number());
-    if(is_bool())
-        return as_bool()? "true": "false";
-    if(is_obj())
-        return objectToString(*this);
-    return "????";
-}
-
 bool Value::operator==(const Value& other) const
 {
     if(is_obj() && other.is_obj())
@@ -254,23 +241,6 @@ void Value::clear()
 void Value::swap(Value& other)
 {
     data.swap(other.data);
-}
-
-std::string Value::to_string() const
-{
-    if(is_obj())
-        return objectToString(*this);
-
-    return std::visit([](auto&& value) -> std::string {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, std::monostate>)
-            return "nil";
-        else if constexpr (std::is_same_v<T, double>)
-            return std::to_string(value);
-        else if constexpr (std::is_same_v<T, bool>)
-            return value? "true": "false";
-        return "????";
-    }, data);
 }
 
 bool Value::operator==(const Value& other) const

@@ -1,22 +1,20 @@
 #pragma once
 #include "commons.h"
 
-enum class TokenType
+enum class TokenType: u8
 {
-    LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
-    COMMA, DOT, MINUS, PLUS,
-    SEMICOLON, SLASH, STAR,
-    BANG, BANG_EQUAL,
-    EQUAL, EQUAL_EQUAL,
-    GREATER, GREATER_EQUAL,
-    LESS, LESS_EQUAL,
+    LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, LEFT_SQUARE, RIGHT_SQUARE,
+    COMMA, DOT, SEMICOLON, COLON, 
+    MINUS, PLUS, SLASH, STAR, TILDE, CARET,
+    BANG, BANG_EQUAL, EQUAL, EQUAL_EQUAL, APPROX_EQUAL,
+    GREATER, GREATER_EQUAL, LESS, LESS_EQUAL,
     IDENTIFIER, STRING, NUMBER, IMAGINARY,
-    AND, CLASS, ELSE, FALSE,
-    FAIL, FOR, FUN, IF, NIL, OR,
-    PRINT, RETURN, SUPER, THIS,
-    TRUE, VAR, WHILE, STATIC,
+    AND, OR, TRUE, FALSE, NIL,
+    FOR, WHILE, IF, ELSE, VAR,
+    FUN, RETURN, FAIL, PRINT,
+    CLASS, THIS, SUPER, STATIC,
     BREAK, CONTINUE,
-    TEOF, ERROR, NONE
+    TEOF, ERROR
 };
 
 static const std::unordered_map<string, TokenType> keywords = 
@@ -45,7 +43,7 @@ static const std::unordered_map<string, TokenType> keywords =
 
 struct Token
 {
-    TokenType type = TokenType::NONE;
+    TokenType type = TokenType::ERROR;
     const char* start = nullptr;
     int len = 0;
     int line = 1;

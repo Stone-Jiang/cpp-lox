@@ -40,13 +40,17 @@ Token Scanner::scan()
     case ')': return tok(TokenType::RIGHT_PAREN);
     case '{': return tok(TokenType::LEFT_BRACE);
     case '}': return tok(TokenType::RIGHT_BRACE);
+    case '[': return tok(TokenType::LEFT_SQUARE);
+    case ']': return tok(TokenType::RIGHT_SQUARE);
     case ';': return tok(TokenType::SEMICOLON);
+    case ':': return tok(TokenType::COLON);
     case ',': return tok(TokenType::COMMA);
     case '.': return tok(TokenType::DOT);
     case '-': return tok(TokenType::MINUS);
     case '+': return tok(TokenType::PLUS);
     case '/': return tok(TokenType::SLASH);
     case '*': return tok(TokenType::STAR);
+    case '^': return tok(TokenType::CARET);
     case '!':
         return tok(match('=')? TokenType::BANG_EQUAL: TokenType::BANG);
     case '=':
@@ -55,6 +59,8 @@ Token Scanner::scan()
         return tok(match('=')? TokenType::LESS_EQUAL: TokenType::LESS);
     case '>':
         return tok(match('=')? TokenType::GREATER_EQUAL: TokenType::GREATER);
+    case '~':
+        return tok(match('=')? TokenType::APPROX_EQUAL: TokenType::TILDE);
     case '"': return stringy();
     }
 

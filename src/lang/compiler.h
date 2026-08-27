@@ -17,7 +17,7 @@ private:
     bool panic = false;
 };
 
-enum class Prec
+enum class Prec: u8
 {
     NONE, ASSIGNMENT, 
     OR, AND, EQUALITY, COMPARISON,
@@ -60,12 +60,12 @@ struct Upvalue
     bool isLocal;
 };
 
-enum class FunctionType
+enum class FunctionType: u8
 {
     FUNCTION, INIT, METHOD, STATIC_METHOD, SCRIPT
 };
 
-enum class MethodContext
+enum class MethodContext: u8
 {
     NONE, INSTANCE, STATIC
 };
@@ -225,6 +225,8 @@ private:
         return &current->func->chunk;
     }
 
+    void arrayLit(bool);
+    void subscript(bool);
 };
 
 

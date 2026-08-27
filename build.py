@@ -47,13 +47,13 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
 # ---------------------------------------------------------------------------
 
 # Flags applied to every build, regardless of profile.
-COMMON_FLAGS = ["-Wall", "-Wextra", "-g", "-fdiagnostics-color=always"]
+COMMON_FLAGS = ["-Wall", "-Wextra", "-fdiagnostics-color=always"]
 
 # Flags applied only to the release (-O2) profile.
-RELEASE_FLAGS = ["-O2"]
+RELEASE_FLAGS = ["-O2", "-fno-rtti", "-Wl,--strip-all", "-Wl,--gc-sections"]
 
 # Flags applied only to the debug (-O0) profile.
-DEBUG_FLAGS = ["-O0", "-g3", "-fno-omit-frame-pointer"]
+DEBUG_FLAGS = ["-O0", "-g", "-g3", "-fno-omit-frame-pointer"]
 
 # ---------------------------------------------------------------------------
 # Preprocessor macros - plain names (no -D), written like you'd use them in

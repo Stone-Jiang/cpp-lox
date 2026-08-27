@@ -11,7 +11,7 @@
 
 class VM;
 void prepareAllocation(VM* owner, size_t oldSize, size_t newSize);
-void trackAllocation(VM* owner, size_t oldSize, size_t newSize);
+void trackAlloc(VM* owner, size_t oldSize, size_t newSize);
 
 template <typename T>
 class Vector
@@ -26,7 +26,7 @@ private:
     void reportCapacityChange(size_t oldCap, size_t newCap)
     {
         if(owner != nullptr)
-            trackAllocation(owner, oldCap * sizeof(T), newCap * sizeof(T));
+            trackAlloc(owner, oldCap * sizeof(T), newCap * sizeof(T));
     }
 
     size_t nextCapacity() const
@@ -324,14 +324,14 @@ public:
 
     void reserve(size_t newcap);
 
-    void insert(int pos, const T& val)
+    void insert(size_t pos, const T& val)
     {
-        if(pos < 0 || static_cast<size_t>(pos) > sz)
+        if(pos > sz)
             throw std::out_of_range("index out of bounds");
         if(sz==cap)
             expand(nextCapacity());
 
-        for(size_t i=sz; i>static_cast<size_t>(pos); --i)
+        for(size_t i=sz; i>pos; --i)
         {
             new (&arr[i]) T(std::move(arr[i-1]));
             arr[i-1].~T();

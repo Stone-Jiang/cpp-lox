@@ -125,6 +125,13 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return constantInstruction("OpCode::METHOD", chunk, offset);
         case OpCode::STATIC_METHOD:
             return constantInstruction("OpCode::STATIC_METHOD", chunk, offset);
+
+        case OpCode::MAKE_ARRAY:
+            return byteInstruction("OpCode::MAKE_ARRAY", chunk, offset);
+        case OpCode::GET_INDEX:
+            return simpleInstruction("OpCode::GET_INDEX", offset);
+        case OpCode::SET_INDEX:
+            return simpleInstruction("OpCode::SET_INDEX", offset);
         default:
             printf("Unknown opcode %d\n", ins);
             return offset + 1;

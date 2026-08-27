@@ -20,12 +20,24 @@ struct CallFrame
     Value* slots = nullptr;
 };
 
+enum class IndexResult
+{
+    OK, 
+    NOT_NUMBER,
+    NOT_INTEGRAL,
+    NOT_FINITE,
+    NOT_SAFE,
+    OUT_OF_RANGE
+};
+
 class VM
 {
     friend class Compiler;
+    friend class TemporaryRootGuard;
+
     friend void allocObj(VM*, Obj*, size_t);
     friend void prepareAllocation(VM*, size_t, size_t);
-    friend void trackAllocation(VM*, size_t, size_t);
+    friend void trackAlloc(VM*, size_t, size_t);
     friend ObjString* copyString(VM&, std::string_view);
 
     size_t bytesAlloc = 0;
@@ -89,41 +101,18 @@ private:
 
     Result run();
 
-    size_t stackSize() const noexcept
-    {
-        return static_cast<size_t>(stackTop - stack.data());
-    }
+    size_t stackSize() const;
+    void resetStack();
+    Value peek(int dist);
 
-    Value peek(int dist)
-    {
-        if(dist < 0 || static_cast<size_t>(dist) >= stackSize())
-            throw std::overflow_error("access out of bounds");
-        return stackTop[-1 - dist];
-    }
-
-    static bool isFalsy(Value value)
-    {
-        return value.is_nil() || (value.is_bool() && !value.as_bool());
-    }
-
+    void concat();
 
     template<typename... Args>
     void runtimeError(std::string_view fmt, Args&&... args);
+
     Value makeErrorResult(ErrorKind kind, std::string_view message, Value payload = Value());
-    bool rejectErrorValue(Value value, std::string_view context);
-
-    void resetStack();
-
-    void concat()
-    {
-        auto* b = as<ObjString>(peek(0));
-        auto* a = as<ObjString>(peek(1));
-        auto* result = copyString(*this, a->str() + b->str());
-
-        pop();
-        pop();
-        push(Value(result));
-    }
+    bool rejectError(Value value, std::string_view context);
+    Value makeIndexError(Value index, size_t length, IndexResult reason);
 
     void freeObjs();
     static void freeObj(Obj* object);
@@ -136,10 +125,13 @@ private:
     bool findMember(ObjClass* klass, ObjString* name, ClassMember& member);
     bool getClassProperty(ObjClass* klass, ObjString* name);
     bool getInstanceProperty(ObjInstance* instance, ObjString* name);
+    bool getNativeProperty(Value receiver, ObjString* name);
+    bool setNativeProperty(Value receiver, ObjString* name);
     bool setClassProperty(ObjClass* klass, ObjString* name, Value value);
     bool bindMethod(ObjClass* klass, ObjString* name);
     bool bindSuperMethod(ObjClass* klass, ObjString* name);
     bool invoke(ObjString* name, int argCount);
+    bool invokeNativeMethod(Value receiver, ObjString* name, int argCount);
     bool invokeClass(ObjClass* klass, ObjString* name, int argCount);
     bool invokeSuper(ObjClass* klass, ObjString* name, int argCount);
     void defineMethod(ObjString* name, bool isStatic);
@@ -164,4 +156,12 @@ private:
 };
 
 ObjString* copyString(VM& owner, std::string_view chars);
+
+struct NormalIndexInfo 
+{
+    size_t index;
+    IndexResult result;
+};
+
+NormalIndexInfo normalIndex(const Value& value, size_t length);
 

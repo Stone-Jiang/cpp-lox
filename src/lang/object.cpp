@@ -11,7 +11,7 @@ ObjType objType(const Value& value)
 
 bool isType(const Value& value, ObjType type)
 {
-    return value.is_obj() && value.is_obj()!=nullptr && value.as_obj()->type == type;
+    return value.is_obj() && value.as_obj()!=nullptr && value.as_obj()->type == type;
 }
 
 const string& as_string(const Value& value)
@@ -28,7 +28,7 @@ const char* as_cstr(const Value& value)
 
 namespace
 {
-std::string formatNumber(double value)
+string formatNumber(double value)
 {
     if(value == 0.0)
         value = 0.0;
@@ -38,7 +38,7 @@ std::string formatNumber(double value)
     return output.str();
 }
 
-std::string formatComplex(const std::complex<double>& value)
+string formatComplex(const std::complex<double>& value)
 {
     const double real = value.real();
     const double imag = value.imag();
@@ -52,93 +52,6 @@ std::string formatComplex(const std::complex<double>& value)
         (imag >= 0.0 ? "+" : "") +
         formatNumber(imag) + "i";
 }
-}
-
-std::string objectToString(const Value& value)
-{
-    if(!value.is_obj() || value.as_obj() == nullptr)
-        return "?";
-
-    switch(value.as_obj()->type)
-    {
-    case ObjType::STRING:
-        return as<ObjString>(value)->str();
-    case ObjType::COMPLEX:
-        return formatComplex(as<ObjComplex>(value)->c);
-    case ObjType::ERROR:
-    {
-        const auto* error = as<ObjError>(value);
-        return std::format("<err {}: {}>",
-            errorKindName(error->kind), error->message->str());
-    }
-    default:
-        return "????";
-    }
-}
-
-void printFunction(const ObjFunction* func)
-{
-    if(func->name == nullptr)
-        std::printf("<script>");
-    else
-        std::printf("<fn %s>", func->name->str().c_str());
-}
-
-void printObject(const Value& value)
-{
-    if(!value.is_obj() || value.as_obj() == nullptr)
-        return;
-
-    switch (value.as_obj()->type)
-    {
-    case ObjType::FUNCTION:
-        printFunction(as<ObjFunction>(value));
-        break;
-    case ObjType::STRING:
-        std::printf("%s", objectToString(value).c_str());
-        break;
-    case ObjType::NATIVE:
-        std::printf("<native fn>");
-        break;
-    case ObjType::CLOSURE:
-        printFunction(as<ObjClosure>(value)->func);
-        break;
-    case ObjType::UPVALUE:
-        printf("upvalue");
-        break;
-    case ObjType::CLASS:
-        printf("<cls %s>", as<ObjClass>(value)->name->str().c_str());
-        break;
-    case ObjType::ERROR:
-        std::printf("%s", objectToString(value).c_str());
-        break;
-    case ObjType::INSTANCE:
-        printf("<ins of cls %s>", as<ObjInstance>(value)->klass->name->str().c_str());
-        break;
-    case ObjType::BOUND_METHOD:
-        printFunction(as<ObjBoundMethod>(value)->method->func);
-        break;
-    case ObjType::COMPLEX:
-        std::printf("%s", objectToString(value).c_str());
-        break;
-    default:
-        std::printf("<object>");
-        break;
-    }
-}
-
-void printValue(const Value& value)
-{
-    if(value.is_nil())
-        std::printf("nil");
-    else if(value.is_number())
-        std::printf("%g", value.as_number());
-    else if(value.is_bool())
-        std::printf(value.as_bool()? "true": "false");
-    else if(value.is_obj())
-        printObject(value);
-    else
-        std::printf("Unknown");
 }
 
 bool objectsEqual(Obj* left, Obj* right)
@@ -155,7 +68,87 @@ bool objectsEqual(Obj* left, Obj* right)
     case ObjType::COMPLEX:
         return static_cast<ObjComplex*>(left)->c ==
             static_cast<ObjComplex*>(right)->c;
+    case ObjType::ARRAY:
+        return false; //! Update
     default:
         return false;
     }
 }
+
+std::string to_string(const Value& value)
+{
+    if(value.is_nil())
+        return ("nil");
+    else if(value.is_number())
+        return formatNumber(value.as_number());
+    else if(value.is_bool())
+        return value.as_bool()? "true": "false";
+    else if(value.is_obj())
+        return to_string(value.as_obj());
+    else
+        return "unknown value"; // unreachable
+}
+
+std::string to_string(const Obj* obj)
+{
+    if(obj==nullptr)
+        return "?";
+    switch (obj->type)
+    {
+    case ObjType::FUNCTION:
+        return to_string(as<ObjFunction>(obj));
+    case ObjType::STRING:
+        return as<ObjString>(obj)->str();
+    case ObjType::NATIVE:
+        return "<native fn>";
+    case ObjType::CLOSURE:
+        return to_string(as<ObjClosure>(obj)->func);
+    case ObjType::UPVALUE:
+        return "upvalue";
+        break;
+    case ObjType::CLASS:
+        return "<cls " + as<ObjClass>(obj)->name->str() + ">";
+    case ObjType::ERROR:
+    {
+        const auto* error = as<ObjError>(obj);
+        return std::format("<err {}: {}>", errorKindName(error->kind), error->message->str());
+    }
+    case ObjType::INSTANCE:
+        return "<ins of cls " + as<ObjInstance>(obj)->klass->name->str() + ">";
+    case ObjType::BOUND_METHOD:
+        return to_string(as<ObjBoundMethod>(obj)->method->func);
+    case ObjType::COMPLEX:
+        return formatComplex(as<ObjComplex>(obj)->c);
+    case ObjType::ARRAY:
+    {
+        const auto& vec = as<ObjArray>(obj)->elements;
+        string s;
+        s.reserve(vec.size()*3);
+        s += "[";
+        for (size_t i = 0; i < vec.size()-1; i++)
+        {
+            s += to_string(vec[i]);
+            s += ", ";
+        }
+        s += to_string(vec[vec.size()-1]);
+        s += "]";
+        return s;
+    }
+    default:
+        return "<obj ?>";
+    }
+}
+
+std::string to_string(const ObjFunction* func)
+{
+    if(func->name == nullptr)
+        return "<script>";
+    else
+        return "<fn %s>" + func->name->str();
+}
+
+void printValue(const Value& value)
+{
+    std::printf("%s", to_string(value).c_str());
+}
+

@@ -10,7 +10,7 @@ Table::Table(VM* vm): owner(vm)
 
 Table::~Table()
 {
-    trackAllocation(owner, slotStorageBytes(accountedSlots), 0);
+    trackAlloc(owner, slotStorageBytes(accountedSlots), 0);
 }
 
 size_t Table::slotStorageBytes(size_t slots)
@@ -51,7 +51,7 @@ void Table::ensureCapacity(size_t entries)
     const size_t newBytes = slotStorageBytes(newSlots);
     prepareAllocation(owner, oldBytes, newBytes);
     m.reserve(entries);
-    trackAllocation(owner, oldBytes, newBytes);
+    trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
 }
 
@@ -108,7 +108,7 @@ MemberTable::MemberTable(VM* vm): owner(vm)
 
 MemberTable::~MemberTable()
 {
-    trackAllocation(owner, slotStorageBytes(accountedSlots), 0);
+    trackAlloc(owner, slotStorageBytes(accountedSlots), 0);
 }
 
 size_t MemberTable::slotStorageBytes(size_t slots)
@@ -149,7 +149,7 @@ void MemberTable::ensureCapacity(size_t entries)
     const size_t newBytes = slotStorageBytes(newSlots);
     prepareAllocation(owner, oldBytes, newBytes);
     m.reserve(entries);
-    trackAllocation(owner, oldBytes, newBytes);
+    trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
 }
 
@@ -230,7 +230,7 @@ StringPool::StringPool(VM* vm): owner(vm)
 
 StringPool::~StringPool()
 {
-    trackAllocation(owner, slotStorageBytes(accountedSlots), 0);
+    trackAlloc(owner, slotStorageBytes(accountedSlots), 0);
 }
 
 size_t StringPool::slotStorageBytes(size_t slots)
@@ -271,7 +271,7 @@ void StringPool::ensureCapacity(size_t entries)
     const size_t newBytes = slotStorageBytes(newSlots);
     prepareAllocation(owner, oldBytes, newBytes);
     m.reserve(entries);
-    trackAllocation(owner, oldBytes, newBytes);
+    trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
 }
 
