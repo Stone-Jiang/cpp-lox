@@ -68,7 +68,7 @@ Token Scanner::tok(TokenType type)
 
 Token Scanner::error(const string& msg)
 {
-    return Token(TokenType::ERROR, nullptr, 0, tokenLine);
+    return Token(TokenType::ERROR, msg.c_str(), 0, tokenLine);
 }
 
 bool Scanner::isAtEnd()

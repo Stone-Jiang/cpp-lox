@@ -116,8 +116,8 @@ private:
 
     void concat()
     {
-        auto* b = as_str(peek(0));
-        auto* a = as_str(peek(1));
+        auto* b = as<ObjString>(peek(0));
+        auto* a = as<ObjString>(peek(1));
         auto* result = copyString(*this, a->str() + b->str());
 
         pop();

@@ -16,7 +16,7 @@ enum class ObjType
     BOUND_METHOD, 
     CLASS, 
     CLOSURE, 
-    ERROR_RESULT,
+    ERROR,
     FUNCTION, 
     INSTANCE, 
     NATIVE, 
@@ -28,23 +28,23 @@ enum class ObjType
 
 struct Obj
 {
+    static constexpr ObjType basetype = ObjType::OBJ;
+
     VM* owner = nullptr;
     ObjType type;
     Obj* next = nullptr;
     bool marked = false;
 
     Obj(VM* owner, ObjType type): owner(owner), type(type) {}
-
-    Obj(): type(ObjType::OBJ) {}
 };
 
 struct ObjString: Obj
 {
+    static constexpr ObjType basetype = ObjType::STRING;
     const std::string chars;
     const size_t hash;
 
-    ObjString(VM* owner, std::string chars):
-        Obj(owner, ObjType::STRING), chars(std::move(chars)),
+    ObjString(VM* owner, std::string chars): Obj(owner, basetype), chars(std::move(chars)),
         hash(std::hash<std::string_view>{}(this->chars)) {}
 
     const std::string& str() const
@@ -55,50 +55,52 @@ struct ObjString: Obj
 
 struct ObjComplex: Obj
 {
+    static constexpr ObjType basetype = ObjType::COMPLEX;
     std::complex<double> c;
 
-    ObjComplex(VM* owner): Obj(owner, ObjType::COMPLEX), c(0) {}
-    ObjComplex(VM* owner, double r, double i): Obj(owner, ObjType::COMPLEX), c(r, i) {}
+    ObjComplex(VM* owner): Obj(owner, basetype), c(0, 0) {}
+    ObjComplex(VM* owner, double r, double i): Obj(owner, basetype), c(r, i) {}
 };
 
 struct ObjFunction: Obj
 {
+    static constexpr ObjType basetype = ObjType::FUNCTION;
     int arity = 0;
     int upvalCount = 0;
     Chunk chunk;
     ObjString* name = nullptr;
 
     ObjFunction(VM* owner, ObjString* functionName = nullptr):
-        Obj(owner, ObjType::FUNCTION), chunk(owner), name(functionName) {}
+        Obj(owner, basetype), chunk(owner), name(functionName) {}
 };
 
 struct ObjNative: Obj
 {
+    static constexpr ObjType basetype = ObjType::NATIVE;
     NativeFn func;
     int arity;
 
-    ObjNative(VM* owner, NativeFn nf, int a):
-        Obj(owner, ObjType::NATIVE), func(nf), arity(a) {}
+    ObjNative(VM* owner, NativeFn nf, int a): Obj(owner, basetype), func(nf), arity(a) {}
 };
 
 struct ObjUpvalue: Obj
 {
+    static constexpr ObjType basetype = ObjType::UPVALUE;
     Value* location = nullptr;
     Value closed;
     ObjUpvalue* next = nullptr;
 
-    ObjUpvalue(VM* owner, Value* slot):
-        Obj(owner, ObjType::UPVALUE), location(slot), closed(Value()) {}
+    ObjUpvalue(VM* owner, Value* slot): Obj(owner, basetype), location(slot), closed(Value()) {}
 };
 
 struct ObjClosure: Obj
 {
+    static constexpr ObjType basetype = ObjType::CLOSURE;
     ObjFunction* func = nullptr;
     Vector<ObjUpvalue*> upvalues;
     int upvalueCount;
 
-    ObjClosure(VM* owner, ObjFunction* f):
-        Obj(owner, ObjType::CLOSURE), upvalues(owner)
+    ObjClosure(VM* owner, ObjFunction* f): Obj(owner, basetype), upvalues(owner)
     {
         for(int i=0; i<f->upvalCount; i++)
             upvalues.push_back(nullptr);
@@ -110,65 +112,47 @@ struct ObjClosure: Obj
 
 struct ObjClass: Obj
 {
+    static constexpr ObjType basetype = ObjType::CLASS;
     ObjString* name = nullptr;
     ObjClass* superclass = nullptr;
     MemberTable members;
 
-    ObjClass(VM* owner, ObjString* name):
-        Obj(owner, ObjType::CLASS), name(name), members(owner) {}
+    ObjClass(VM* owner, ObjString* name): Obj(owner, basetype), name(name), members(owner) {}
 };
 
-struct ObjErrorResult: Obj
+struct ObjError: Obj
 {
+    static constexpr ObjType basetype = ObjType::ERROR;
     ErrorKind kind = ErrorKind::USER_ERROR;
     ObjString* message = nullptr;
     Value payload;
 
-    ObjErrorResult(VM* owner, ErrorKind kind, ObjString* message, Value payload = Value()):
-        Obj(owner, ObjType::ERROR_RESULT), kind(kind), message(message), payload(payload) {}
+    ObjError(VM* owner, ErrorKind kind, ObjString* message, Value payload = Value()):
+        Obj(owner, basetype), kind(kind), message(message), payload(payload) {}
 };
 
 struct ObjInstance: Obj
 {
+    static constexpr ObjType basetype = ObjType::INSTANCE;
     ObjClass* klass = nullptr;
     Table fields;
 
-    ObjInstance(VM* owner, ObjClass* klass):
-        Obj(owner, ObjType::INSTANCE), klass(klass), fields(owner) {}
+    ObjInstance(VM* owner, ObjClass* klass): 
+        Obj(owner, basetype), klass(klass), fields(owner) {}
 };
 
 struct ObjBoundMethod: Obj
 {
+    static constexpr ObjType basetype = ObjType::BOUND_METHOD;
     Value receiver;
     ObjClosure* method = nullptr;
 
-    ObjBoundMethod(VM* owner, Value val, ObjClosure* c):
-        Obj(owner, ObjType::BOUND_METHOD), receiver(val), method(c) {}
+    ObjBoundMethod(VM* owner, Value val, ObjClosure* c): 
+        Obj(owner, basetype), receiver(val), method(c) {}
 };
 
 ObjType objType(const Value& value);
 bool isType(const Value& value, ObjType type);
-
-bool is_str(const Value& value);
-const ObjString* as_str(const Value& value);
-const std::string& as_string(const Value& value);
-const char* as_cstr(const Value& value);
-bool is_func(const Value& value);
-ObjFunction* as_func(const Value& value);
-bool is_native(const Value& value);
-ObjNative* as_native(const Value& value);
-bool is_closure(const Value& value);
-ObjClosure* as_closure(const Value& value);
-bool is_class(const Value& value);
-ObjClass* as_class(const Value& value);
-bool is_error_result(const Value& value);
-ObjErrorResult* as_error_result(const Value& value);
-bool is_instance(const Value& value);
-ObjInstance* as_instance(const Value& value);
-bool is_bound_meth(const Value& value);
-ObjBoundMethod* as_bound_meth(const Value& value);
-bool is_complex(const Value& value);
-ObjComplex* as_complex(const Value& value);
 
 template <class T>
 concept Objective = std::is_base_of_v<Obj, T>;
@@ -176,14 +160,22 @@ concept Objective = std::is_base_of_v<Obj, T>;
 template <Objective T>
 bool is(const Value& value)
 {
-    return true;
+    return isType(value, T::basetype);
 }
 
 template <Objective T>
-inline T* as(const Value& value)
+T* as(const Value& value)
 {
+    if(!value.is_obj())
+        throw std::invalid_argument("value cannot be cast");
+
     return static_cast<T*>(value.as_obj());
 }
+
+const string& as_string(const Value& value);
+const char* as_cstr(const Value& value);
+
+// -----
 
 template <Objective T, typename... Args>
 T* makeObj(VM& owner, Args&&... args)

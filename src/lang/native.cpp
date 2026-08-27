@@ -32,7 +32,7 @@ NativeResult typeNative(VM& vm, int, Value* args)
         case ObjType::BOUND_METHOD:
             type = "fun";
             break;
-        case ObjType::ERROR_RESULT:
+        case ObjType::ERROR:
             type = "error";
             break;
         case ObjType::CLASS:
@@ -40,7 +40,7 @@ NativeResult typeNative(VM& vm, int, Value* args)
             break;
         case ObjType::INSTANCE:
             return NativeResult::success(Value(
-                copyString(vm, as_instance(args[0])->klass->name->str())));
+                copyString(vm, as<ObjInstance>(args[0])->klass->name->str())));
         default:
             type = "object";
             break;

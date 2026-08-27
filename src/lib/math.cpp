@@ -82,8 +82,8 @@ bool numericValue(std::string_view function, const Value& value,
 {
     if(value.is_number())
         result = {value.as_number(), 0.0};
-    else if(is_complex(value))
-        result = as_complex(value)->c;
+    else if(is<ObjComplex>(value))
+        result = as<ObjComplex>(value)->c;
     else
     {
         error = typeError(function, "a number or complex number");

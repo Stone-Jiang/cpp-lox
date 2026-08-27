@@ -22,18 +22,12 @@
   </header>
 
   <main class="workspace">
-    <aside class="sidebar">
-      <div class="section-label">Examples</div>
-      <button class="example active" data-example="basics">Basics</button>
-      <button class="example" data-example="functions">Functions</button>
-      <button class="example" data-example="classes">Classes</button>
-      <button class="example" data-example="complex">Complex math</button>
-    </aside>
-
     <section class="editor-panel">
       <div class="panel-toolbar">
-        <span class="filename">main.lox</span>
+        <span class="filename" id="filename">No file selected</span>
         <div class="toolbar-actions">
+          <input id="sourceFile" class="file-input" type="file" accept=".lox,text/plain">
+          <label class="upload-button" for="sourceFile">Open file</label>
           <button class="icon-button" id="clearEditor" title="Clear editor" aria-label="Clear editor">X</button>
           <button class="run-button" id="runCode"><span class="play-icon" aria-hidden="true"></span>Run</button>
         </div>

@@ -1,7 +1,6 @@
 #include "object.h"
 
 #include <iomanip>
-#include <sstream>
 
 ObjType objType(const Value& value)
 {
@@ -12,109 +11,17 @@ ObjType objType(const Value& value)
 
 bool isType(const Value& value, ObjType type)
 {
-    return value.is_obj() && value.as_obj()->type == type;
+    return value.is_obj() && value.is_obj()!=nullptr && value.as_obj()->type == type;
 }
 
-bool is_str(const Value& value)
+const string& as_string(const Value& value)
 {
-    return isType(value, ObjType::STRING);
-}
-
-const ObjString* as_str(const Value& value)
-{
-    return static_cast<const ObjString*>(value.as_obj());
-}
-
-const std::string& as_string(const Value& value)
-{
-    return as_str(value)->str();
+    return as<ObjString>(value)->str();
 }
 
 const char* as_cstr(const Value& value)
 {
     return as_string(value).c_str();
-}
-
-bool is_func(const Value& value)
-{
-    return isType(value, ObjType::FUNCTION);
-}
-
-ObjFunction* as_func(const Value& value)
-{
-    return static_cast<ObjFunction*>(value.as_obj());
-}
-
-bool is_native(const Value& value)
-{
-    return isType(value, ObjType::NATIVE);
-}
-
-ObjNative* as_native(const Value& value)
-{
-    return static_cast<ObjNative*>(value.as_obj());
-}
-
-bool is_closure(const Value& value)
-{
-    return isType(value, ObjType::CLOSURE);
-}
-
-ObjClosure* as_closure(const Value& value)
-{
-    return static_cast<ObjClosure*>(value.as_obj());
-}
-
-bool is_class(const Value& value)
-{
-    return isType(value, ObjType::CLASS);
-}
-
-ObjClass* as_class(const Value& value)
-{
-    return static_cast<ObjClass*>(value.as_obj());
-}
-
-bool is_error_result(const Value& value)
-{
-    return isType(value, ObjType::ERROR_RESULT);
-}
-
-ObjErrorResult* as_error_result(const Value& value)
-{
-    return static_cast<ObjErrorResult*>(value.as_obj());
-}
-
-bool is_instance(const Value& value)
-{
-    return isType(value, ObjType::INSTANCE);
-}
-
-ObjInstance* as_instance(const Value& value)
-{
-    return static_cast<ObjInstance*>(value.as_obj());
-}
-
-bool is_bound_meth(const Value& value)
-{
-    return isType(value, ObjType::BOUND_METHOD);
-}
-
-ObjBoundMethod* as_bound_meth(const Value& value)
-{
-    return static_cast<ObjBoundMethod*>(value.as_obj());
-}
-
-// -----
-
-bool is_complex(const Value& value)
-{
-    return isType(value, ObjType::COMPLEX);
-}
-
-ObjComplex* as_complex(const Value& value)
-{
-    return static_cast<ObjComplex*>(value.as_obj());
 }
 
 // -----
@@ -134,33 +41,33 @@ std::string formatNumber(double value)
 std::string formatComplex(const std::complex<double>& value)
 {
     const double real = value.real();
-    const double imaginary = value.imag();
+    const double imag = value.imag();
 
-    if(imaginary == 0.0)
+    if(imag == 0.0)
         return formatNumber(real);
     if(real == 0.0)
-        return formatNumber(imaginary) + "i";
+        return formatNumber(imag) + "i";
 
     return formatNumber(real) +
-        (imaginary >= 0.0 ? "+" : "") +
-        formatNumber(imaginary) + "i";
+        (imag >= 0.0 ? "+" : "") +
+        formatNumber(imag) + "i";
 }
 }
 
 std::string objectToString(const Value& value)
 {
     if(!value.is_obj() || value.as_obj() == nullptr)
-        return "????";
+        return "?";
 
     switch(value.as_obj()->type)
     {
     case ObjType::STRING:
-        return as_str(value)->str();
+        return as<ObjString>(value)->str();
     case ObjType::COMPLEX:
-        return formatComplex(as_complex(value)->c);
-    case ObjType::ERROR_RESULT:
+        return formatComplex(as<ObjComplex>(value)->c);
+    case ObjType::ERROR:
     {
-        const auto* error = as_error_result(value);
+        const auto* error = as<ObjError>(value);
         return std::format("<err {}: {}>",
             errorKindName(error->kind), error->message->str());
     }
@@ -185,7 +92,7 @@ void printObject(const Value& value)
     switch (value.as_obj()->type)
     {
     case ObjType::FUNCTION:
-        printFunction(as_func(value));
+        printFunction(as<ObjFunction>(value));
         break;
     case ObjType::STRING:
         std::printf("%s", objectToString(value).c_str());
@@ -194,22 +101,22 @@ void printObject(const Value& value)
         std::printf("<native fn>");
         break;
     case ObjType::CLOSURE:
-        printFunction(as_closure(value)->func);
+        printFunction(as<ObjClosure>(value)->func);
         break;
     case ObjType::UPVALUE:
         printf("upvalue");
         break;
     case ObjType::CLASS:
-        printf("<cls %s>", as_class(value)->name->str().c_str());
+        printf("<cls %s>", as<ObjClass>(value)->name->str().c_str());
         break;
-    case ObjType::ERROR_RESULT:
+    case ObjType::ERROR:
         std::printf("%s", objectToString(value).c_str());
         break;
     case ObjType::INSTANCE:
-        printf("<ins of cls %s>", as_instance(value)->klass->name->str().c_str());
+        printf("<ins of cls %s>", as<ObjInstance>(value)->klass->name->str().c_str());
         break;
     case ObjType::BOUND_METHOD:
-        printFunction(as_bound_meth(value)->method->func);
+        printFunction(as<ObjBoundMethod>(value)->method->func);
         break;
     case ObjType::COMPLEX:
         std::printf("%s", objectToString(value).c_str());

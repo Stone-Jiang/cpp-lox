@@ -1,36 +1,3 @@
-const examples = {
-  basics: `print "Craft playground";
-
-var a = 6;
-var b = 7;
-print a * b;
-print sqrt(81);`,
-  functions: `fun fibonacci(n) {
-  if (n <= 1) return n;
-  return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-print fibonacci(12);`,
-  classes: `class Counter {
-  init(start) {
-    this.value = start;
-  }
-
-  increment() {
-    this.value = this.value + 1;
-    return this.value;
-  }
-}
-
-var counter = Counter(40);
-print counter.increment();
-print counter.increment();`,
-  complex: `var z = 3 + 4i;
-print z;
-print mag(z);
-print sqrt'(z);`
-};
-
 const editor = document.querySelector("#editor");
 const lineNumbers = document.querySelector("#lineNumbers");
 const output = document.querySelector("#output");
@@ -40,6 +7,8 @@ const status = document.querySelector("#status");
 const statusText = document.querySelector("#statusText");
 const replHistory = document.querySelector("#replHistory");
 const replInput = document.querySelector("#replInput");
+const sourceFile = document.querySelector("#sourceFile");
+const filename = document.querySelector("#filename");
 
 function setStatus(state, text) {
   status.dataset.state = state;
@@ -104,12 +73,11 @@ function addReplEntry(command, result, failed = false) {
   replHistory.scrollTop = replHistory.scrollHeight;
 }
 
-editor.value = localStorage.getItem("craft-playground-source") || examples.basics;
+editor.value = "";
 updateLines();
 
 editor.addEventListener("input", () => {
   updateLines();
-  localStorage.setItem("craft-playground-source", editor.value);
 });
 editor.addEventListener("scroll", updateLines);
 editor.addEventListener("keydown", event => {
@@ -126,8 +94,25 @@ editor.addEventListener("keydown", event => {
 });
 
 runButton.addEventListener("click", runSource);
+sourceFile.addEventListener("change", async () => {
+  const [file] = sourceFile.files;
+  if (!file) return;
+
+  try {
+    editor.value = await file.text();
+    filename.textContent = file.name;
+    editor.dispatchEvent(new Event("input"));
+    editor.focus();
+    setStatus("ready", "File loaded");
+  } catch (error) {
+    setStatus("error", "Could not read file");
+  } finally {
+    sourceFile.value = "";
+  }
+});
 document.querySelector("#clearEditor").addEventListener("click", () => {
   editor.value = "";
+  filename.textContent = "No file selected";
   editor.dispatchEvent(new Event("input"));
   editor.focus();
 });
@@ -136,14 +121,6 @@ document.querySelector("#clearConsole").addEventListener("click", () => {
   replHistory.replaceChildren();
   exitCode.textContent = "";
 });
-
-document.querySelectorAll(".example").forEach(button => button.addEventListener("click", () => {
-  document.querySelectorAll(".example").forEach(item => item.classList.remove("active"));
-  button.classList.add("active");
-  editor.value = examples[button.dataset.example];
-  editor.dispatchEvent(new Event("input"));
-  editor.focus();
-}));
 
 document.querySelectorAll(".console-tab").forEach(tab => tab.addEventListener("click", () => switchConsole(tab.dataset.view)));
 

@@ -4,18 +4,20 @@
 
 Compiler Compiler::comp{};
 
+using std::complex;
+
 namespace
 {
 bool isNumeric(const Value& value)
 {
-    return value.is_number() || is_complex(value);
+    return value.is_number() || is<ObjComplex>(value);
 }
 
-std::complex<double> asComplexNumber(const Value& value)
+complex<double> asComplexNumber(const Value& value)
 {
-    return value.is_number()
-        ? std::complex<double>(value.as_number(), 0.0)
-        : as_complex(value)->c;
+    return value.is_number()? 
+        complex<double>(value.as_number(), 0.0): 
+        as<ObjComplex>(value)->c;
 }
 
 size_t saturatingAdd(size_t left, size_t right)
@@ -173,15 +175,15 @@ Result VM::run()
         case OpCode::ADD:
         {
             if(rejectErrorValue(peek(0), "Can't use an error value in addition.") ||
-               rejectErrorValue(peek(1), "Can't use an error value in addition."))
+                rejectErrorValue(peek(1), "Can't use an error value in addition."))
                 return Result::RUNTIME_ERROR;
 
-            if(is_str(peek(0)) && is_str(peek(1)))
+            if(is<ObjString>(peek(0)) && is<ObjString>(peek(1)))
                 concat();
             else if(isNumeric(peek(0)) && isNumeric(peek(1)))
             {
-                if(!complexBinaryOp([](std::complex<double> a,
-                                       std::complex<double> b) { return a+b; }))
+                if(!complexBinaryOp([](complex<double> a,
+                                        complex<double> b) { return a+b; }))
                     return Result::RUNTIME_ERROR;
             }
             else
@@ -193,18 +195,18 @@ Result VM::run()
         }
         
         case OpCode::SUBTRACT:
-            if(!complexBinaryOp([](std::complex<double> a,
-                                   std::complex<double> b) { return a-b; }))
+            if(!complexBinaryOp([](complex<double> a,
+                                   complex<double> b) { return a-b; }))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::MULTIPLY:
-            if(!complexBinaryOp([](std::complex<double> a,
-                                   std::complex<double> b) { return a*b; }))
+            if(!complexBinaryOp([](complex<double> a,
+                                   complex<double> b) { return a*b; }))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::DIVIDE:
-            if(!complexBinaryOp([](std::complex<double> a,
-                                   std::complex<double> b) { return a/b; }))
+            if(!complexBinaryOp([](complex<double> a,
+                                   complex<double> b) { return a/b; }))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::GREATER:
@@ -254,9 +256,9 @@ Result VM::run()
             }
 
             Value operand = peek(0);
-            if(is_complex(operand))
+            if(is<ObjComplex>(operand))
             {
-                const auto result = -as_complex(operand)->c;
+                const auto result = -as<ObjComplex>(operand)->c;
                 auto* value = makeObj<ObjComplex>(*this,
                     result.real(), result.imag());
                 pop();
@@ -269,7 +271,7 @@ Result VM::run()
             break;
         }
         case OpCode::IS_ERROR:
-            push(Value(is_error_result(peek(0))));
+            push(Value(is<ObjError>(peek(0))));
             break;
         case OpCode::RETURN:
         {
@@ -292,7 +294,7 @@ Result VM::run()
             Value kindValue = pop();
 
             if(rejectErrorValue(kindValue, "Can't use an error value as an error kind.") ||
-               rejectErrorValue(messageValue, "Can't use an error value as an error message."))
+                rejectErrorValue(messageValue, "Can't use an error value as an error message."))
                 return Result::RUNTIME_ERROR;
 
             ErrorKind kind;
@@ -301,7 +303,7 @@ Result VM::run()
                 runtimeError("Error kind must be one of the built-in error kind constants.");
                 return Result::RUNTIME_ERROR;
             }
-            if(!is_str(messageValue))
+            if(!is<ObjString>(messageValue))
             {
                 runtimeError("Error message must be a string.");
                 return Result::RUNTIME_ERROR;
@@ -315,7 +317,7 @@ Result VM::run()
 
             if(frameCount == 0)
             {
-                const auto* error = as_error_result(result);
+                const auto* error = as<ObjError>(result);
                 const auto kindName = errorKindName(error->kind);
                 const auto& errorMessage = error->message->str();
                 runtimeError("Unhandled error result. Original error [{}]: {}",
@@ -405,7 +407,7 @@ Result VM::run()
         }
         case OpCode::CLOSURE:
         {
-            auto func = as_func(read_constant(frame));
+            auto func = as<ObjFunction>(read_constant(frame));
             auto clos = makeObj<ObjClosure>(*this, func);
             push(Value(clos));
 
@@ -453,15 +455,15 @@ Result VM::run()
             ObjString* name = read_str(frame);
             if(rejectErrorValue(receiver, "Can't access a property on an error value."))
                 return Result::RUNTIME_ERROR;
-            if(is_instance(receiver))
+            if(is<ObjInstance>(receiver))
             {
-                if(!getInstanceProperty(as_instance(receiver), name))
+                if(!getInstanceProperty(as<ObjInstance>(receiver), name))
                     return Result::RUNTIME_ERROR;
                 break;
             }
-            if(is_class(receiver))
+            if(is<ObjClass>(receiver))
             {
-                if(!getClassProperty(as_class(receiver), name))
+                if(!getClassProperty(as<ObjClass>(receiver), name))
                     return Result::RUNTIME_ERROR;
                 break;
             }
@@ -475,18 +477,18 @@ Result VM::run()
             ObjString* name = read_str(frame);
             if(rejectErrorValue(receiver, "Can't assign a property on an error value."))
                 return Result::RUNTIME_ERROR;
-            if(is_instance(receiver))
+            if(is<ObjInstance>(receiver))
             {
-                auto instance = as_instance(receiver);
+                auto instance = as<ObjInstance>(receiver);
                 instance->fields.set(name, peek(0));
                 Value value = pop();
                 pop();
                 push(value);
                 break;
             }
-            if(is_class(receiver))
+            if(is<ObjClass>(receiver))
             {
-                if(!setClassProperty(as_class(receiver), name, peek(0)))
+                if(!setClassProperty(as<ObjClass>(receiver), name, peek(0)))
                     return Result::RUNTIME_ERROR;
                 Value value = pop();
                 pop();
@@ -519,14 +521,14 @@ Result VM::run()
         {
             Value superclass = peek(1);
 
-            if(!is_class(superclass))
+            if(!is<ObjClass>(superclass))
             {
                 runtimeError("Superclass must be a class.");
                 return Result::RUNTIME_ERROR;
             }
 
-            auto subclass = as_class(peek(0));
-            subclass->superclass = as_class(superclass);
+            auto subclass = as<ObjClass>(peek(0));
+            subclass->superclass = as<ObjClass>(superclass);
 
             pop();
             break;
@@ -535,7 +537,7 @@ Result VM::run()
         case OpCode::GET_SUPER:
         {
             auto name = read_str(frame);
-            auto superclass = as_class(pop());
+            auto superclass = as<ObjClass>(pop());
 
             if(!bindSuperMethod(superclass, name))
                 return Result::RUNTIME_ERROR;
@@ -546,7 +548,7 @@ Result VM::run()
         {
             auto method = read_str(frame);
             int argCount = read_byte(frame);
-            auto superclass = as_class(pop());
+            auto superclass = as<ObjClass>(pop());
             if(!invokeSuper(superclass, method, argCount))
                 return Result::RUNTIME_ERROR;
             frame = &frames[frameCount-1];
@@ -590,10 +592,10 @@ Value VM::makeErrorResult(ErrorKind kind, std::string_view message, Value payloa
     ObjString* msg = copyString(*this, message);
     push(Value(msg));
 
-    ObjErrorResult* result = nullptr;
+    ObjError* result = nullptr;
     try
     {
-        result = makeObj<ObjErrorResult>(*this, kind, msg, payload);
+        result = makeObj<ObjError>(*this, kind, msg, payload);
     }
     catch(...)
     {
@@ -611,10 +613,10 @@ Value VM::makeErrorResult(ErrorKind kind, std::string_view message, Value payloa
 
 bool VM::rejectErrorValue(Value value, std::string_view context)
 {
-    if(!is_error_result(value))
+    if(!is<ObjError>(value))
         return false;
 
-    auto* error = as_error_result(value);
+    auto* error = as<ObjError>(value);
     const auto kind = errorKindName(error->kind);
     const auto& message = error->message->str();
     runtimeError("{} Original error [{}]: {}", context, kind, message);
@@ -653,9 +655,9 @@ void VM::freeObj(Obj* object)
         size = saturatingAdd(sizeof(ObjClass), objectExtraBytes(object));
         delete static_cast<ObjClass*>(object);
         break;
-    case ObjType::ERROR_RESULT:
-        size = sizeof(ObjErrorResult);
-        delete static_cast<ObjErrorResult*>(object);
+    case ObjType::ERROR:
+        size = sizeof(ObjError);
+        delete static_cast<ObjError*>(object);
         break;
     case ObjType::INSTANCE:
         size = sizeof(ObjInstance);
@@ -733,7 +735,7 @@ bool VM::complexBinaryOp(Op op)
 
     const auto result = op(asComplexNumber(left), asComplexNumber(right));
 
-    if(is_complex(left) || is_complex(right))
+    if(is<ObjComplex>(left) || is<ObjComplex>(right))
     {
         auto* value = makeObj<ObjComplex>(*this,
             result.real(), result.imag());
@@ -760,11 +762,11 @@ bool VM::callValue(Value callee, int argCount)
         switch (objType(callee))
         {
         case ObjType::FUNCTION:
-            return call(as_closure(callee), argCount);
+            return call(as<ObjClosure>(callee), argCount);
             break;
         case ObjType::NATIVE:
         {
-            auto native = as_native(callee);
+            auto native = as<ObjNative>(callee);
             if(native->arity >= 0 && argCount != native->arity)
             {
                 runtimeError("Expected {} arguments but got {}.", native->arity, argCount);
@@ -782,22 +784,22 @@ bool VM::callValue(Value callee, int argCount)
             return true;
         }
         case ObjType::CLOSURE:
-            return call(as_closure(callee), argCount);
+            return call(as<ObjClosure>(callee), argCount);
         case ObjType::CLASS:
         {
-            auto klass = as_class(callee);
+            auto klass = as<ObjClass>(callee);
             stackTop[-argCount-1] =
                 Value(makeObj<ObjInstance>(*this, klass));
 
             ClassMember init;
             if(findMember(klass, initStr, init) && !init.isStatic)
             {
-                if(!is_closure(init.value))
+                if(!is<ObjClosure>(init.value))
                 {
                     runtimeError("Initializer must be a method.");
                     return false;
                 }
-                return call(as_closure(init.value), argCount);
+                return call(as<ObjClosure>(init.value), argCount);
             }
             else if(argCount !=0)
             {
@@ -809,7 +811,7 @@ bool VM::callValue(Value callee, int argCount)
         }
         case ObjType::BOUND_METHOD:
         {
-            auto bound = as_bound_meth(callee);
+            auto bound = as<ObjBoundMethod>(callee);
             stackTop[-argCount-1] = bound->receiver;
             return call(bound->method, argCount);
         }
@@ -970,14 +972,14 @@ bool VM::bindMethod(ObjClass* klass, ObjString* name)
         return false;
     }
 
-    if(member.isStatic || !is_closure(member.value))
+    if(member.isStatic || !is<ObjClosure>(member.value))
     {
         pop();
         push(member.value);
         return true;
     }
 
-    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(member.value));
+    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as<ObjClosure>(member.value));
     pop();
     push(Value(bound));
     return true;
@@ -991,13 +993,13 @@ bool VM::bindSuperMethod(ObjClass* klass, ObjString* name)
         runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
-    if(member.isStatic || !is_closure(member.value))
+    if(member.isStatic || !is<ObjClosure>(member.value))
     {
         runtimeError("Superclass member '{}' is not an instance method.", name->str());
         return false;
     }
 
-    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as_closure(member.value));
+    auto bound = makeObj<ObjBoundMethod>(*this, peek(0), as<ObjClosure>(member.value));
     pop();
     push(Value(bound));
     return true;
@@ -1009,9 +1011,9 @@ bool VM::invoke(ObjString* name, int argCount)
     if(rejectErrorValue(receiver, "Can't invoke a method on an error value."))
         return false;
 
-    if(is_instance(receiver))
+    if(is<ObjInstance>(receiver))
     {
-        auto instance = as_instance(receiver);
+        auto instance = as<ObjInstance>(receiver);
 
         Value value;
         if(instance->fields.get(name, value))
@@ -1023,10 +1025,10 @@ bool VM::invoke(ObjString* name, int argCount)
         return invokeClass(instance->klass, name, argCount);
     }
 
-    if(is_class(receiver))
+    if(is<ObjClass>(receiver))
     {
         ClassMember member;
-        if(!findMember(as_class(receiver), name, member))
+        if(!findMember(as<ObjClass>(receiver), name, member))
         {
             runtimeError("Undefined property '{}'.", name->str());
             return false;
@@ -1054,13 +1056,13 @@ bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
         return false;
     }
 
-    if(member.isStatic || !is_closure(member.value))
+    if(member.isStatic || !is<ObjClosure>(member.value))
     {
         stackTop[-argCount-1] = member.value;
         return callValue(member.value, argCount);
     }
 
-    return call(as_closure(member.value), argCount);
+    return call(as<ObjClosure>(member.value), argCount);
 }
 
 bool VM::invokeSuper(ObjClass* klass, ObjString* name, int argCount)
@@ -1071,19 +1073,19 @@ bool VM::invokeSuper(ObjClass* klass, ObjString* name, int argCount)
         runtimeError("Undefined property '{}'.", name->str());
         return false;
     }
-    if(member.isStatic || !is_closure(member.value))
+    if(member.isStatic || !is<ObjClosure>(member.value))
     {
         runtimeError("Superclass member '{}' is not an instance method.", name->str());
         return false;
     }
 
-    return call(as_closure(member.value), argCount);
+    return call(as<ObjClosure>(member.value), argCount);
 }
 
 void VM::defineMethod(ObjString* name, bool isStatic)
 {
     Value method = peek(0);
-    auto klass = as_class(peek(1));
+    auto klass = as<ObjClass>(peek(1));
     klass->members.set(name, ClassMember{method, isStatic});
     pop();
 }
@@ -1238,9 +1240,9 @@ void VM::blackenObject(Obj* object)
         markMemberTable(klass->members);
         break;
     }
-    case ObjType::ERROR_RESULT:
+    case ObjType::ERROR:
     {
-        auto error = static_cast<ObjErrorResult*>(object);
+        auto error = static_cast<ObjError*>(object);
         markObject(error->message);
         markValue(error->payload);
         break;
@@ -1274,7 +1276,6 @@ void VM::blackenObject(Obj* object)
     case ObjType::STRING:
     case ObjType::COMPLEX:
         break;
-    case ObjType::NONE:
     case ObjType::OBJ:
     default:
         // unreachable
