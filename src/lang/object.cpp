@@ -141,10 +141,12 @@ std::string to_string(const Obj* obj)
 
 std::string to_string(const ObjFunction* func)
 {
+    if(func == nullptr)
+        return "<fn ?>";
     if(func->name == nullptr)
         return "<script>";
     else
-        return "<fn %s>" + func->name->str();
+        return std::format("<fn {}>", func->name->str());
 }
 
 void printValue(const Value& value)

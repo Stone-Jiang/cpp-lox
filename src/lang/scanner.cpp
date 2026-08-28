@@ -1,5 +1,29 @@
 #include "scanner.h"
 
+static const std::unordered_map<string, TokenType> keywords = 
+{
+    {"and",    TokenType::AND},
+    {"class",  TokenType::CLASS},
+    {"else",   TokenType::ELSE},
+    {"false",  TokenType::FALSE},
+    {"fail",   TokenType::FAIL},
+    {"for",    TokenType::FOR},
+    {"fun",    TokenType::FUN},
+    {"if",     TokenType::IF},
+    {"nil",    TokenType::NIL},
+    {"or",     TokenType::OR},
+    {"print",  TokenType::PRINT},
+    {"return", TokenType::RETURN},
+    {"super",  TokenType::SUPER},
+    {"static", TokenType::STATIC},
+    {"this",   TokenType::THIS},
+    {"true",   TokenType::TRUE},
+    {"var",    TokenType::VAR},
+    {"while",  TokenType::WHILE},
+    {"break",  TokenType::BREAK},
+    {"continue",TokenType::CONTINUE}
+};
+
 bool isAlpha(char c)
 {
     return (c >= 'a' && c <= 'z') ||
@@ -51,10 +75,11 @@ Token Scanner::scan()
     case '/': return tok(TokenType::SLASH);
     case '*': return tok(TokenType::STAR);
     case '^': return tok(TokenType::CARET);
+    case '\\': return tok(TokenType::BACKSLASH);
     case '!':
         return tok(match('=')? TokenType::BANG_EQUAL: TokenType::BANG);
     case '=':
-        return tok(match('=')? TokenType::EQUAL_EQUAL: TokenType::EQUAL);
+        return tok(match('=')? TokenType::EQUAL_EQUAL: (match('>')? TokenType::RIGHT_ARROW: TokenType::EQUAL));
     case '<':
         return tok(match('=')? TokenType::LESS_EQUAL: TokenType::LESS);
     case '>':

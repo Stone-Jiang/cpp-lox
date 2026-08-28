@@ -200,6 +200,16 @@ NativeResult arrayClear(VM&, Value receiver, int, Value*)
     return NativeResult::success(Value());
 }
 
+NativeResult arrayReverse(VM&, Value receiver, int, Value*)
+{
+    auto array = as<ObjArray>(receiver);
+    
+    std::reverse(array->elements.begin(), array->elements.end());
+    return NativeResult::success(Value());
+}
+
+// -----
+
 constexpr std::array properties {
     NativePropertyDef{"len", arrayLength},
 };
@@ -210,6 +220,7 @@ constexpr std::array methods {
     NativeMethodDef{"insert", 2, arrayInsert},
     NativeMethodDef{"clear", 0, arrayClear},
     NativeMethodDef{"copy", 0, arrayCopy},
+    NativeMethodDef{"reverse", 0, arrayReverse},
 };
 }
 

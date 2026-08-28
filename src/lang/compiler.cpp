@@ -1,8 +1,7 @@
 #include "compiler.h"
 #include "vm.h"
 
-Compiler::Compiler(VM& vm, FunctionType type):
-    enclosing(current), owner(&vm), ftype(type)
+Compiler::Compiler(VM& vm, FunctionType type): enclosing(current), owner(&vm), ftype(type)
 {
     current = this;
 
@@ -11,7 +10,11 @@ Compiler::Compiler(VM& vm, FunctionType type):
 
     try
     {
-        if(type != FunctionType::SCRIPT && enclosing != nullptr)
+        if(type == FunctionType::LAMBDA)
+        {
+            functionName = copyString(vm, "(lambda)");
+        }
+        else if(type != FunctionType::SCRIPT && enclosing != nullptr)
         {
             functionName = copyString(vm, std::string_view(
                 enclosing->parser.prev.start,
@@ -496,30 +499,13 @@ void Compiler::function_(FunctionType type)
     beginScope();
     consume(TokenType::LEFT_PAREN, "Expect '(' after function name.");
 
-    if(!check(TokenType::RIGHT_PAREN))
-    {
-        do
-        {
-            current->func->arity++;
-            if(current->func->arity>255)
-                errorAtCur("Can't have more than 255 parameters.");
-            u8 constant = parseVar("Expect parameter name.");
-            defineVar(constant);
-        } while (match(TokenType::COMMA));
-    }
+    parameterList();
 
-    consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters.");
     consume(TokenType::LEFT_BRACE, "Expect '{' before function body.");
     block();
 
     ObjFunction* func = end();
-    emit(OpCode::CLOSURE, makeConstant(Value(func)));
-
-    for(int i=0; i<func->upvalCount; i++)
-    {
-        emit(compiler.upvalues[i].isLocal? 1: 0);
-        emit(compiler.upvalues[i].index);
-    }
+    emitClosure(compiler, func);
 }
 
 void Compiler::method(bool isStatic)
@@ -1073,6 +1059,8 @@ MethodContext Compiler::methodContext() const
             return MethodContext::STATIC;
         case FunctionType::FUNCTION:
         case FunctionType::SCRIPT:
+        case FunctionType::LAMBDA:
+
             break;
         }
     }
@@ -1201,6 +1189,63 @@ void Compiler::subscript(bool canAssign)
     }
 }
 
+void Compiler::lambda(bool)
+{
+    Compiler compiler(*owner, FunctionType::LAMBDA);
+    beginScope();
+
+    if(match(TokenType::LEFT_PAREN))
+        parameterList();
+    else
+        parameter();
+
+    consume(TokenType::RIGHT_ARROW,"Expect '=>' after lambda parameters.");
+
+    expression();
+    emit(OpCode::RETURN);
+    ObjFunction* function = end();
+    emitClosure(compiler, function);
+}
+
+void Compiler::parameter()
+{
+    current->func->arity++;
+    if(current->func->arity > 255)
+        errorAtCur("Can't have more than 255 parameters.");
+    u8 parameter = parseVar("Expect parameter name.");
+    defineVar(parameter);
+}
+
+void Compiler::parameterList()
+{
+    if(!check(TokenType::RIGHT_PAREN))
+    {
+        while(true)
+        {
+            parameter();
+            if(!match(TokenType::COMMA))
+                break;
+            if(check(TokenType::RIGHT_PAREN))
+            {
+                errorAtCur("Expect parameter after ','.");
+                break;
+            }
+        }
+    }
+
+    consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters.");
+}
+
+void Compiler::emitClosure(const Compiler& compiler, ObjFunction* func)
+{
+    emit(OpCode::CLOSURE, makeConstant(Value(func)));
+    for(int i=0; i<func->upvalCount; i++)
+    {
+        emit(compiler.upvalues[i].isLocal? 1: 0);
+        emit(compiler.upvalues[i].index);
+    }
+}
+
 // -----
 
 consteval Rules RulesMaker::make() noexcept
@@ -1238,6 +1283,7 @@ consteval Rules RulesMaker::make() noexcept
     set(TokenType::THIS, &Compiler::this_, nullptr, Prec::NONE);
     set(TokenType::TRUE, &Compiler::literal, nullptr, Prec::NONE);
     set(TokenType::LEFT_SQUARE, &Compiler::arrayLit, &Compiler::subscript, Prec::CALL);
+    set(TokenType::BACKSLASH, &Compiler::lambda, nullptr, Prec::NONE);
 
     return result;
 }

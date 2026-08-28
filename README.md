@@ -1,12 +1,12 @@
-**Craft is a C++20 implementation of the bytecode VM from [*Crafting Interpreters*](https://craftinginterpreters.com/), extended beyond the original C implementation of clox.**
+**This is a C++20 implementation of the bytecode VM from [*Crafting Interpreters*](https://craftinginterpreters.com/), extended beyond the original C implementation of clox.**
 
 The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string interning, and mark-and-sweep garbage collector retain the overall clox architecture. The implementation uses C++ types and lifetime management while keeping the runtime based on compact tagged values and objects rather than a virtual C++ class hierarchy.
 
 ## Requirements and Building
 
-- Probably a 64-bit machine (not tested on 32-bit machine)
+- Probably a 64-bit machine (not tested on 32-bit machines)
 - Python 3 (for playground and incremental build script)
-- A C++ **20** C++ compiler available as `g++`, `clang++`, or `MSVC`.
+- A C++ **20** compiler available as `g++`, `clang++`, or `MSVC`.
 
 The included incremental build script discovers sources under `src/`, tracks transitive local-header dependencies, and compiles independent files in parallel (not required, can be replaced with `make` or `cmake`). 
 
@@ -19,11 +19,11 @@ python build.py -j 8            # use eight compilation workers
 python build.py --clean         # remove generated objects and executables
 ```
 
-The release executable is named `main` (`main.exe` on Windows), and the debug executable is named `debug` (`debug.exe` on Windows). Use `--cc` to select a specific compiler.
+The release executable is named `main`, and the debug executable is named `debug`. Use `--cc` to select a specific compiler.
 
 ## Differences from the Original C Implementation
 
-#### C++ runtime structure
+### C++ runtime structure
 
 - Core runtime concepts are represented by classes and strongly typed scoped enums instead of groups of C structs, globals, and loosely related helper functions.
 - Fixed-capacity VM storage uses `std::array`. Growable bytecode, constant, line, and upvalue storage uses a project `Vector<T>` implementation with complete construction, destruction, copy, move, and iteration behavior.
@@ -33,7 +33,7 @@ The release executable is named `main` (`main.exe` on Windows), and the debug ex
 - Runtime diagnostics use `std::format` and C++ exceptions are reserved for internal failures such as invalid access, overflow, and allocation-related errors. Lox-level failures are represented separately as runtime values.
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
 
-#### Configurable value and table implementations
+### Configurable value and table implementations
 
 `src/switches.h` controls two important implementation choices:
 
@@ -41,13 +41,13 @@ The release executable is named `main` (`main.exe` on Windows), and the debug ex
 - With `BETTER_HASH_TABLE` enabled, globals, fields, members, and interned strings use bundled robin-hood flat hash containers. Without it, they use `std::unordered_map` and `std::unordered_set`.
 - String interning supports heterogeneous lookup by `std::string_view`, so a temporary heap string is not required merely to search the intern pool.
 
-#### Native-function interface
+### Native-function interface
 
 Native functions are registered through compile-time `NativeDef` tables containing a name, arity, and function pointer. Each native receives the active `VM&`, which lets it allocate VM-owned objects and return detailed failures. `NativeResult` distinguishes success from failure and can carry an error kind, message, and optional Lox payload.
 
 Adding a native therefore does not require modifying the VM's call dispatch: define the function and add one entry to a native-definition table.
 
-#### Runtime and command-line behavior
+### Runtime and command-line behavior
 
 - Supplying one path runs that source file directly.
 - Starting the executable without arguments opens a persistent REPL.
@@ -57,11 +57,11 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 
 ## Language Extensions
 
-#### Loop control
+### Loop control
 
 `break` and `continue` are supported in `while` and `for` loops, including nested loops. The compiler rejects either keyword outside a loop and prevents loop control from crossing a function boundary.
 
-#### Complex numbers and mathematics
+### Complex numbers and mathematics
 
 - Imaginary literals such as `4i` are scanned and compiled directly.
 - Arithmetic promotes real numbers when either operand is complex.
@@ -72,7 +72,7 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 - Native math functions validate types, domains, ranges, and finite results instead of silently passing invalid results through the VM.
 - The numeric system directly uses C++ library functions with the same behavior, meaning that mathematically true expressions like `sin(1)/cos(1)==tan(1)` might evaluate to false. The only small change is that a value near zero (by 1e-11) is approximated to zero.
 
-#### Error values and recovery
+### Error values and recovery
 
 Native functions and user defined functions can produce typed error values. This error-handling system is inspired by Rust/Haskell, in which when an error happens, an `ObjError` object is returned. An error is automatically unpacked if no error happens. If an error is unhandled and used directly (except for printing, reading meta info like `typeof()`, or functions specifically for handling functions), the VM screams and aborts the program.
 
@@ -104,7 +104,7 @@ fun requireNonNegative(value) {
 print requireNonNegative(-1) else 0;
 ```
 
-#### Static methods and mutable class members
+### Static methods and mutable class members
 
 Methods declared with `static` can be called through a class or an object:
 
@@ -122,11 +122,11 @@ class Counter {
 
 Static methods participate in inherited member lookup. Instance methods remain bound to a receiver, and the compiler rejects `this` or `super` in static context. Class members can be replaced at runtime, for example `Counter.create = anotherFunction`.
 
-#### Runtime type and meta information
+### Runtime type and meta information
 
 The `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
 
-#### Arrays
+### Arrays
 
 Arrays are dynamically sized, mutable objects whose elements remain dynamically typed. Whitespace is insignificant in literals, and a trailing comma is allowed.
 
@@ -217,6 +217,61 @@ print a; // [1, 2, 3, [1, 2, 3]]
 ```
 
 Arrays participate in garbage-collector tracing: objects stored only inside a reachable array remain alive. Ordinary assignment, argument passing, and return values continue to share the same array object unless `copy()` is called explicitly.
+
+### Lambdas / Anonymous functions
+
+A lambda is defined in Haskell-fashion as `var a = \x => x + 1;`. They follow the same rules as functions in terms of being first-class, capable of assignment, capturing closures etc., but they can be anonymous. They can also be used on-spot.
+
+These are correct ways of defining and using lambdas:
+
+```
+// Zero parameters.
+var one = \() => 1;
+print one(); // expect: 1
+print one; // expect: <fn (lambda)>
+
+// Bare and parenthesized single parameters.
+print (\x => x + 1)(2);   // expect: 3
+print (\(x) => x + 1)(2); // expect: 3
+
+// Multiple parameters.
+print (\(x, y) => x + y)(2, 3); // expect: 5
+
+// Capture.
+fun makeAdder(n) {
+  return \x => x + n;
+}
+print makeAdder(5)(10); // expect: 15
+
+// Nested capture.
+var make = \x => \y => x + y;
+print make(2)(3); // expect: 5
+
+// Mutation of captured state.
+fun counter() {
+  var n = 0;
+  return \() => n = n + 1;
+}
+
+var next = counter();
+print next(); // expect: 1
+print next(); // expect: 2
+
+// First-class storage.
+var functions = [\x => x + 1];
+print functions[0](9); // expect: 10
+```
+
+These are rejected by the compiler.
+
+```
+var bad = \ => 1;
+var bad = \(a, a) => a;
+var bad = \(a b) => a + b;
+var bad = \(a,) => a;
+var bad = \x, y => x + y;
+var bad = \x x + 1;
+```
 
 ## Playground
 

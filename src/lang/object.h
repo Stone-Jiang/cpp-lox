@@ -215,7 +215,10 @@ T* makeObj(VM& owner, Args&&... args)
     return object;
 }
 
+std::string to_string(const Value& value);
+std::string to_string(const Obj* obj);
 
+std::string to_string(const ObjFunction* func);
 void printValue(const Value& value);
 
 bool objectsEqual(Obj* left, Obj* right);

@@ -11,35 +11,14 @@ enum class TokenType: u8
     IDENTIFIER, STRING, NUMBER, IMAGINARY,
     AND, OR, TRUE, FALSE, NIL,
     FOR, WHILE, IF, ELSE, VAR,
-    FUN, RETURN, FAIL, PRINT,
+    FUN, RETURN, FAIL, PRINT, BACKSLASH,
     CLASS, THIS, SUPER, STATIC,
     BREAK, CONTINUE,
+    RIGHT_ARROW,
     TEOF, ERROR
 };
 
-static const std::unordered_map<string, TokenType> keywords = 
-{
-    {"and",    TokenType::AND},
-    {"class",  TokenType::CLASS},
-    {"else",   TokenType::ELSE},
-    {"false",  TokenType::FALSE},
-    {"fail",   TokenType::FAIL},
-    {"for",    TokenType::FOR},
-    {"fun",    TokenType::FUN},
-    {"if",     TokenType::IF},
-    {"nil",    TokenType::NIL},
-    {"or",     TokenType::OR},
-    {"print",  TokenType::PRINT},
-    {"return", TokenType::RETURN},
-    {"super",  TokenType::SUPER},
-    {"static", TokenType::STATIC},
-    {"this",   TokenType::THIS},
-    {"true",   TokenType::TRUE},
-    {"var",    TokenType::VAR},
-    {"while",  TokenType::WHILE},
-    {"break",  TokenType::BREAK},
-    {"continue",TokenType::CONTINUE}
-};
+
 
 struct Token
 {

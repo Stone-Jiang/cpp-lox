@@ -62,7 +62,7 @@ struct Upvalue
 
 enum class FunctionType: u8
 {
-    FUNCTION, INIT, METHOD, STATIC_METHOD, SCRIPT
+    FUNCTION, INIT, METHOD, STATIC_METHOD, SCRIPT, LAMBDA
 };
 
 enum class MethodContext: u8
@@ -227,6 +227,11 @@ private:
 
     void arrayLit(bool);
     void subscript(bool);
+
+    void lambda(bool);
+    void parameter();
+    void parameterList();
+    void emitClosure(const Compiler& compiler, ObjFunction* func);
 };
 
 
