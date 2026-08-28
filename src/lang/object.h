@@ -6,6 +6,7 @@
 #include "native.h"
 #include <complex>
 #include <utility>
+#include <concepts>
 
 void prepareObjAllocation(VM* owner, size_t size);
 void allocObj(VM* owner, Obj* object, size_t size);
@@ -166,7 +167,6 @@ struct ObjArray: Obj
 };
 
 
-
 ObjType objType(const Value& value);
 bool isType(const Value& value, ObjType type);
 
@@ -224,3 +224,5 @@ void printValue(const Value& value);
 bool objectsEqual(Obj* left, Obj* right);
 
 ObjString* copyString(VM& owner, std::string_view chars);
+
+bool is_integral(const Value& value);

@@ -23,6 +23,7 @@ struct CallFrame
 enum class IndexResult
 {
     OK, 
+    END,
     NOT_NUMBER,
     NOT_INTEGRAL,
     NOT_FINITE,
@@ -33,7 +34,7 @@ enum class IndexResult
 class VM
 {
     friend class Compiler;
-    friend class TemporaryRootGuard;
+    friend class TempRootGuard;
 
     friend void allocObj(VM*, Obj*, size_t);
     friend void prepareAllocation(VM*, size_t, size_t);

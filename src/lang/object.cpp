@@ -154,3 +154,18 @@ void printValue(const Value& value)
     std::printf("%s", to_string(value).c_str());
 }
 
+bool is_integral(const Value& value)
+{
+    if(!value.is_number())
+        return false;
+
+    const double raw = value.as_number();
+    if(!std::isfinite(raw))
+        return false;
+    if(std::trunc(raw)!=raw)
+        return false;
+    if(std::abs(raw)>MAX_INDEX)
+        return false;
+    
+    return true;
+}

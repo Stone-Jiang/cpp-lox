@@ -25,6 +25,69 @@ complex<double> asComplexNumber(const Value& value)
         as<ObjComplex>(value)->c;
 }
 
+bool approxEqual(complex<double> left, complex<double> right)
+{
+    if(left == right)
+        return true;
+
+    if(!std::isfinite(left.real()) || !std::isfinite(left.imag()) ||
+        !std::isfinite(right.real()) || !std::isfinite(right.imag()))
+        return false;
+
+    const double scale = std::max({1.0, std::abs(left), std::abs(right)});
+    return std::abs(left - right) <= APPROX_EPSILON * scale;
+}
+
+struct ArrayComparison
+{
+    const ObjArray* left;
+    const ObjArray* right;
+    const ArrayComparison* parent;
+};
+
+bool approxEqual(
+    const Value& left,
+    const Value& right,
+    const ArrayComparison* comparisonPath)
+{
+    if(isNumeric(left) && isNumeric(right))
+        return approxEqual(asComplexNumber(left), asComplexNumber(right));
+
+    const bool leftIsArray = is<ObjArray>(left);
+    const bool rightIsArray = is<ObjArray>(right);
+    if(leftIsArray != rightIsArray)
+        return false;
+
+    if(!leftIsArray)
+        return left == right;
+
+    const auto* leftArray = as<ObjArray>(left);
+    const auto* rightArray = as<ObjArray>(right);
+    if(leftArray == rightArray)
+        return true;
+    if(leftArray->elements.size() != rightArray->elements.size())
+        return false;
+
+    for(const ArrayComparison* comparison = comparisonPath;
+        comparison != nullptr;
+        comparison = comparison->parent)
+    {
+        if(comparison->left == leftArray && comparison->right == rightArray)
+            return true;
+    }
+
+    // This node lives in the current recursive stack frame. It prevents cycles
+    // without allocating a separate container or changing either array.
+    const ArrayComparison current{leftArray, rightArray, comparisonPath};
+    for(size_t i = 0; i < leftArray->elements.size(); ++i)
+    {
+        if(!approxEqual(
+            leftArray->elements[i], rightArray->elements[i], &current))
+            return false;
+    }
+    return true;
+}
+
 size_t saturatingAdd(size_t left, size_t right)
 {
     const size_t max = std::numeric_limits<size_t>::max();
@@ -112,8 +175,10 @@ NormalIndexInfo normalIndex(const Value& value, size_t length)
     if(index>=0)
     {
         const size_t pos = static_cast<size_t>(index);
-        if(pos>=length)
+        if(pos>length)
             return {0, IndexResult::OUT_OF_RANGE}; 
+        if(pos==length)
+            return {pos, IndexResult::END};
         return {pos, IndexResult::OK};
     }
     else
@@ -125,22 +190,22 @@ NormalIndexInfo normalIndex(const Value& value, size_t length)
     }
 }
 
-class TemporaryRootGuard
+class TempRootGuard
 {
     VM& vm;
     Obj* prev;
 public:
-    TemporaryRootGuard(VM& vm, Obj* obj): vm(vm), prev(vm.temporaryRoot)
+    TempRootGuard(VM& vm, Obj* obj): vm(vm), prev(vm.temporaryRoot)
     {
         vm.temporaryRoot = obj;
     }
-    ~TemporaryRootGuard()
+    ~TempRootGuard()
     {
         vm.temporaryRoot = prev;
     }
 
-    TemporaryRootGuard(const TemporaryRootGuard& other) = delete;
-    TemporaryRootGuard& operator=(const TemporaryRootGuard& other) = delete;
+    TempRootGuard(const TempRootGuard& other) = delete;
+    TempRootGuard& operator=(const TempRootGuard& other) = delete;
 };
 
 VM::VM():
@@ -250,18 +315,15 @@ Result VM::run()
         }
         
         case OpCode::SUBTRACT:
-            if(!complexBinaryOp([](complex<double> a,
-                                   complex<double> b) { return a-b; }))
+            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a-b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::MULTIPLY:
-            if(!complexBinaryOp([](complex<double> a,
-                                   complex<double> b) { return a*b; }))
+            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a*b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::DIVIDE:
-            if(!complexBinaryOp([](complex<double> a,
-                                   complex<double> b) { return a/b; }))
+            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a/b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::GREATER:
@@ -273,9 +335,19 @@ Result VM::run()
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::APPROX:
-            if(!binaryOp([](double a, double b) {return std::abs(a-b)<ZERO_EPSILON;}))
+        {
+            std::string_view msg = "Can't compare an error value directly.";
+            if(rejectError(peek(0), msg) || rejectError(peek(1), msg))
                 return Result::RUNTIME_ERROR;
+
+            const bool equal = approxEqual(peek(1), peek(0), nullptr);
+            pop();
+            pop();
+            push(Value(equal));
+
             break;
+        }
+
         case OpCode::NOT:
             push(Value(isFalsy(pop()))); break;
         case OpCode::NIL:
@@ -284,6 +356,7 @@ Result VM::run()
             push(Value(true)); break;
         case OpCode::FALSE:
             push(Value(false)); break;
+        
         case OpCode::POP:
             pop(); break;
         case OpCode::POP_UNHANDLED:
@@ -293,9 +366,14 @@ Result VM::run()
             break;
         case OpCode::EQUAL:
         {
-            if(rejectError(peek(0), "Can't compare an error value directly.") ||
-               rejectError(peek(1), "Can't compare an error value directly."))
-                return Result::RUNTIME_ERROR;
+            std::string_view msg = "Can't compare an error value directly.";
+            if(rejectError(peek(0), msg) || rejectError(peek(1), msg))
+            {
+                Value err = makeErrorResult(ErrorKind::TYPE_ERROR, msg, Value(false));
+                pop();
+                pop();
+                push(err);
+            }
 
             Value b = pop();
             Value a = pop();
@@ -629,7 +707,7 @@ Result VM::run()
         {
             auto count = read_byte(frame);
             auto array = makeObj<ObjArray>(*this);
-            TemporaryRootGuard root(*this, array);
+            TempRootGuard root(*this, array);
 
             try
             {
@@ -842,6 +920,8 @@ Value VM::makeIndexError(Value index, size_t length, IndexResult reason)
         return makeErrorResult(ErrorKind::INDEX_ERROR, "Array index is outside the integer range.", index);
     case IndexResult::OUT_OF_RANGE:
         return makeErrorResult(ErrorKind::INDEX_ERROR, std::format("Array index out of range for length {}.", length), index);
+    case IndexResult::END:
+        return makeErrorResult(ErrorKind::INDEX_ERROR, std::format("Array index {} points past the end of length {}.", length, length), index);
     case IndexResult::OK:
     default:
         return Value();
