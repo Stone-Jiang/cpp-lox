@@ -1,5 +1,6 @@
 #include "native.h"
 #include "../lib/arrays.h"
+#include "../lib/functions.h"
 #include "object.h"
 
 #include <array>
@@ -85,10 +86,16 @@ NativeResult strNative(VM& vm, int, Value* args)
     return NativeResult::success(Value(copyString(vm, to_string(args[0]))));
 }
 
+NativeResult integralNative(VM&, int, Value* args)
+{
+    return NativeResult::success(Value(is_integral(args[0])));
+}
+
 constexpr std::array definitions {
     NativeDef{"clock", 0, clockNative},
     NativeDef{"typeof", 1, typeNative},
     NativeDef{"str", 1, strNative},
+    NativeDef{"integral", 1, integralNative},
 };
 
 }
@@ -105,6 +112,22 @@ std::span<const NativeTypeDef> nativeTypeDefinitions() noexcept
             ObjType::ARRAY,
             arrayNativeProperties(),
             arrayNativeMethods()},
+        NativeTypeDef{
+            ObjType::STRING,
+            {},
+            {}},
+        NativeTypeDef{
+            ObjType::CLOSURE,
+            functionNativeProperties(),
+            functionNativeMethods()},
+        NativeTypeDef{
+            ObjType::NATIVE,
+            functionNativeProperties(),
+            functionNativeMethods()},
+        NativeTypeDef{
+            ObjType::BOUND_METHOD,
+            functionNativeProperties(),
+            functionNativeMethods()},
     };
     return types;
 }

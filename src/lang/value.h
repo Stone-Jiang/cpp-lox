@@ -80,6 +80,8 @@ public:
     bool operator==(double val) const;
     bool operator==(bool val) const;
     bool operator==(std::monostate) const;
+
+    bool operator<(const Value& other) const;
 };
 
 std::string to_string(const Value& value);

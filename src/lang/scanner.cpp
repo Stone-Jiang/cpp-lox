@@ -21,7 +21,8 @@ static const std::unordered_map<string, TokenType> keywords =
     {"var",    TokenType::VAR},
     {"while",  TokenType::WHILE},
     {"break",  TokenType::BREAK},
-    {"continue",TokenType::CONTINUE}
+    {"continue", TokenType::CONTINUE},
+    {"extend", TokenType::EXTEND},
 };
 
 bool isAlpha(char c)
@@ -69,7 +70,7 @@ Token Scanner::scan()
     case ';': return tok(TokenType::SEMICOLON);
     case ':': return tok(TokenType::COLON);
     case ',': return tok(TokenType::COMMA);
-    case '.': return tok(TokenType::DOT);
+
     case '-': return tok(TokenType::MINUS);
     case '+': return tok(TokenType::PLUS);
     case '/': return tok(TokenType::SLASH);
@@ -86,6 +87,10 @@ Token Scanner::scan()
         return tok(match('=')? TokenType::GREATER_EQUAL: TokenType::GREATER);
     case '~':
         return tok(match('=')? TokenType::APPROX_EQUAL: TokenType::TILDE);
+    case '.':
+        if(match('.') && match('.'))
+            return tok(TokenType::ELLIPSIS);
+        return tok(TokenType::DOT);
     case '"': return stringy();
     }
 

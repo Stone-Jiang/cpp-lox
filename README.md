@@ -1,4 +1,4 @@
-**This is a C++20 implementation of the bytecode VM from [*Crafting Interpreters*](https://craftinginterpreters.com/), extended beyond the original C implementation of clox.**
+**This is a C++20 implementation of the bytecode VM of (a superset of) Lox from [*Crafting Interpreters*](https://craftinginterpreters.com/), extended beyond the original C implementation of clox.**
 
 The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string interning, and mark-and-sweep garbage collector retain the overall clox architecture. The implementation uses C++ types and lifetime management while keeping the runtime based on compact tagged values and objects rather than a virtual C++ class hierarchy.
 
@@ -169,12 +169,23 @@ var a = [1, 2];
 print a.len; // 2
 ```
 
-Arrays currently provide these mutating native methods:
+Arrays provide these native methods:
 
 - `push(value)` appends a value and returns `nil`.
 - `pop()` removes and returns the final element; popping an empty array produces an `INDEX` error.
 - `insert(index, value)` inserts before the selected position and returns `nil`. Position `len` appends, and negative positions count backward from the end.
 - `clear()` removes every element and returns `nil`.
+- `copy()` returns a shallow copy with independent outer storage.
+- `reverse()` reverses the array in place and returns `nil`.
+- `concat(other)` appends the elements of another array in place and returns `nil`.
+- `erase(index)` removes the element at an integral index and returns `nil`.
+- `remove(value)` removes the first equal value and reports whether one was found.
+- `front()` and `back()` return the first and last values; an empty array produces an `INDEX` error.
+- `count(value)` returns the number of equal elements.
+- `find(value)` returns the first matching index, or `-1` when no value matches.
+- `slice(lo, hi)` returns a shallow half-open slice `[lo, hi)`. The upper bound may equal `len`.
+- `join(separator)` converts the elements to strings and joins them with a string separator.
+- `sort()` sorts the array in place using the runtime's ordinary value ordering and returns `nil`.
 
 ```
 var a = [1, 3];
@@ -217,6 +228,66 @@ print a; // [1, 2, 3, [1, 2, 3]]
 ```
 
 Arrays participate in garbage-collector tracing: objects stored only inside a reachable array remain alive. Ordinary assignment, argument passing, and return values continue to share the same array object unless `copy()` is called explicitly.
+
+Higher-order array operations are implemented in `src/lib/arrays.lox`, which is loaded once before a file is executed or a REPL session starts. The functions remain callable globally, and selected functions are also registered as array extension methods. `map` returns a new array, while `foreach` replaces the elements of the original array:
+
+```
+var values = [1, 2, 3];
+
+print map(values, \x => x * 2);    // [2, 4, 6]
+print values.map(\x => x + 1);     // [2, 3, 4]
+values.foreach(\x => x * 10);
+print values;                      // [10, 20, 30]
+```
+
+The script library currently provides:
+
+- `map(array, fn)` / `array.map(fn)`: return a new array containing `fn(element)`.
+- `foreach(array, fn)` / `array.foreach(fn)`: replace every element with `fn(element)` and return the original array.
+- `filter(array, predicate)` / `array.filter(predicate)`: return a new array containing matching elements.
+- `fill(array, value)` / `array.fill(value)`: replace every element in place.
+- `foldl(array, initial, fn)` / `array.foldl(initial, fn)`: fold from left to right.
+- `foldr(array, initial, fn)` / `array.foldr(initial, fn)`: fold from right to left.
+- `any(array, predicate)` / `array.any(predicate)` and `all(array, predicate)` / `array.all(predicate)`: test elements with short-circuiting.
+- `find'(array, predicate)` / `array.find'(predicate)`: return the first matching index, or `nil`.
+- `count'(array, predicate)` / `array.count'(predicate)`: count matching elements.
+- `sort'(array, comparator)` / `array.sort'(comparator)`: sort in place using a two-argument comparator.
+- `intersperse(array, value)` / `array.intersperse(value)`: return a new array with a value placed between adjacent elements.
+- `zip(fn, array1, array2)`: combine corresponding elements into a new array, stopping at the shorter input. This function is global-only.
+
+The read-only `arity` attribute reports a function's fixed parameter count. The standard-library methods use it to validate callbacks even when an array is empty.
+
+### Script extension methods
+
+Script functions can be registered as extension methods at top level. The registered implementation receives the method receiver as its first argument:
+
+```
+fun twice(fn, value) {
+    return fn(fn(value));
+}
+
+extend "function" "twice" twice;
+print (\x => x + 1).twice(40); // 42
+```
+
+Array, string, and function extension namespaces are available. Existing native methods cannot be replaced.
+
+The grammar is:
+
+```
+extend-statement -> "extend" STRING STRING expression ";"
+```
+
+The first string must currently be `"array"`, `"string"`, or `"function"`; the second string is the method name, and the final expression must evaluate to a script closure. Registration captures that closure in a garbage-collector root. The closure must declare at least one fixed parameter for the receiver. Duplicate registrations and attempts to replace native methods are runtime errors.
+
+Method dispatch checks native methods first and script extensions second. A direct call rearranges the receiver into the first ordinary argument:
+
+```
+value.method(a, b)
+// equivalent to the registered implementation(value, a, b)
+```
+
+Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
 
 ### Lambdas / Anonymous functions
 
@@ -261,6 +332,41 @@ print next(); // expect: 2
 var functions = [\x => x + 1];
 print functions[0](9); // expect: 10
 ```
+
+### Variadic functions
+
+A final named parameter followed by `...` collects all remaining arguments into a fresh array. The rest array is created for every call, including calls with no extra arguments:
+
+```
+fun collect(first, rest...) {
+  print first;
+  return rest;
+}
+
+print collect(1);                // []
+print collect(1, 2, "three");   // [2, three]
+
+var tail = \(first, rest...) => rest;
+print tail(10, 20, 30);          // [20, 30]
+```
+
+The parameter grammar is:
+
+```
+parameter-list -> IDENTIFIER ("," IDENTIFIER)* ["..."]
+```
+
+In practice, `...` must immediately follow the final parameter name. A rest parameter may be the only parameter, but it cannot be followed by another parameter:
+
+```
+fun collectAll(values...) {}       // valid
+fun collect(first, rest...) {}     // valid
+fun invalid(first..., later) {}    // compile error
+```
+
+The function's fixed arity excludes its rest parameter. Calling a variadic function requires at least that many fixed arguments; surplus arguments are packed into the rest array. The array is mutable, traces its elements for garbage collection, and can safely be captured by a closure.
+
+Ellipsis is currently declaration syntax only. Calls do not yet support array spreading, so `fn(values...)` is not valid call syntax.
 
 These are rejected by the compiler.
 

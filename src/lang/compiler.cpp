@@ -247,6 +247,10 @@ void Compiler::statement()
     {
         printStmt();
     }
+    else if(match(TokenType::EXTEND))
+    {
+        extendStmt();
+    }
     else if(match(TokenType::FOR))
     {
         forStmt();
@@ -1218,19 +1222,30 @@ void Compiler::parameter()
 
 void Compiler::parameterList()
 {
-    if(!check(TokenType::RIGHT_PAREN))
+    if(check(TokenType::RIGHT_PAREN))
     {
-        while(true)
+        advance();
+        return;
+    }
+
+    while(true)
+    {
+        u8 parameter = parseVar("Expect parameter name.");
+        defineVar(parameter);
+        if(match(TokenType::ELLIPSIS))
         {
-            parameter();
-            if(!match(TokenType::COMMA))
-                break;
-            if(check(TokenType::RIGHT_PAREN))
-            {
-                errorAtCur("Expect parameter after ','.");
-                break;
-            }
+            current->func->variadic = true;
+            if(match(TokenType::COMMA))
+                error("Rest parameter must be the final parameter.");
+            break;
         }
+
+        current->func->arity++;
+        if(current->func->arity > 255)
+            error("Can't have more than 255 parameters.");
+
+        if(!match(TokenType::COMMA))
+            break;
     }
 
     consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters.");
@@ -1244,6 +1259,26 @@ void Compiler::emitClosure(const Compiler& compiler, ObjFunction* func)
         emit(compiler.upvalues[i].isLocal? 1: 0);
         emit(compiler.upvalues[i].index);
     }
+}
+
+void Compiler::extendStmt()
+{
+    if(current->ftype != FunctionType::SCRIPT)
+        error("Extension methods can only be declared at top level.");
+
+    consume(TokenType::STRING, "Expect native type name.");
+    emitConstant(Value(copyString(*owner, std::string_view(
+            parser.prev.start + 1,
+            static_cast<size_t>(parser.prev.len - 2)))));
+
+    consume(TokenType::STRING, "Expect extension method name.");
+    emitConstant(Value(copyString(*owner, std::string_view(
+        parser.prev.start + 1,
+        static_cast<size_t>(parser.prev.len - 2)))));
+
+    expression();
+    consume(TokenType::SEMICOLON, "Expect ';' after extension declaration.");
+    emit(OpCode::EXTEND);
 }
 
 // -----

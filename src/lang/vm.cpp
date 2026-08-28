@@ -209,7 +209,8 @@ public:
 };
 
 VM::VM():
-    globals(this), strings(this), grayStack(this)
+    globals(this), strings(this), grayStack(this),
+    arrayExt(this), stringExt(this), functionExt(this)
 {
     const auto natives = nativeDefinitions();
     globals.reserve(natives.size());
@@ -807,6 +808,60 @@ Result VM::run()
             break;
         }
 
+        case OpCode::EXTEND:
+        {
+            Value impl = peek(0);
+            Value methodName = peek(1);
+            Value typeName = peek(2);
+
+            if(!is<ObjString>(typeName) || !is<ObjString>(methodName))
+            {
+                runtimeError("Extension type and method names must be strings.");
+                return Result::RUNTIME_ERROR;
+            }
+            if(!is<ObjClosure>(impl))
+            {
+                runtimeError("Extension impl must be a script function.");
+                return Result::RUNTIME_ERROR;
+            }
+
+            const auto& type = as<ObjString>(typeName)->str();
+            const auto& method = as<ObjString>(methodName)->str();
+            Table* extensions = extensionTable(type);
+            if(extensions == nullptr)
+            {
+                runtimeError("Type '{}' does not support extension methods.", type);
+                return Result::RUNTIME_ERROR;
+            }
+            if(as<ObjClosure>(impl)->func->arity < 1)
+            {
+                runtimeError(
+                    "Extension method '{}.{}' must accept its receiver as the first parameter.",
+                    type, method);
+                return Result::RUNTIME_ERROR;
+            }
+            if(nativeMethodExistsForExtensionType(type, method))
+            {
+                runtimeError("Native method '{}.{}' cannot be replaced.", type, method);
+                return Result::RUNTIME_ERROR;
+            }
+
+            Value existing;
+            auto* methodString = as<ObjString>(methodName);
+            if(extensions->get(methodString, existing))
+            {
+                runtimeError("Extension method '{}.{}' is already registered.", type, method);
+                return Result::RUNTIME_ERROR;
+            }
+
+            extensions->set(methodString, impl);
+            pop();
+            pop();
+            pop();
+
+            break;
+        }
+
         default:
             runtimeError("Unknown opcode {}.", instruction);
             return Result::RUNTIME_ERROR;
@@ -1128,9 +1183,13 @@ bool VM::callValue(Value callee, int argCount)
 
 bool VM::call(ObjClosure* clos, int argCount)
 {
-    if(argCount!=clos->func->arity)
+    ObjFunction* function = clos->func;
+    if(!goodArity(function, argCount))
     {
-        runtimeError("Expected {} arguments but got {}.", clos->func->arity, argCount);
+        if(function->variadic)
+            runtimeError("Expected at least {} arguments but got {}.", function->arity, argCount);
+        else
+            runtimeError("Expected {} arguments but got {}.", function->arity, argCount);
         return false;
     }
 
@@ -1140,8 +1199,43 @@ bool VM::call(ObjClosure* clos, int argCount)
         return false;
     }
 
+    if(function->variadic)
+    {
+        Value* slots = stackTop - argCount - 1;
+        const int extraCount = argCount - function->arity;
+        ObjArray* rest = nullptr;
+
+        try
+        {
+            rest = makeObj<ObjArray>(*this);
+            TempRootGuard root(*this, rest);
+            rest->elements.reserve(static_cast<size_t>(extraCount));
+
+            Value* firstExtra = slots + function->arity + 1;
+            for(int i = 0; i < extraCount; ++i)
+                rest->elements.push_back(firstExtra[i]);
+
+            // Drop the separate extra arguments and replace them with the
+            // single array occupying the rest parameter's local slot.
+            stackTop = slots + function->arity + 1;
+            push(Value(rest));
+        }
+        catch(const std::bad_alloc&)
+        {
+            runtimeError("Not enough memory to collect variadic arguments.");
+            return false;
+        }
+        catch(const std::length_error&)
+        {
+            runtimeError("Too many variadic arguments to collect.");
+            return false;
+        }
+
+        argCount = function->arity + 1;
+    }
+
     Value* slots = stackTop - argCount - 1;
-    frames[frameCount++] = {clos, clos->func->chunk.code.data(), slots};
+    frames[frameCount++] = {clos, function->chunk.code.data(), slots};
     return true;
 }
 
@@ -1398,17 +1492,7 @@ bool VM::invokeNativeMethod(Value receiver, ObjString* name, int argCount)
         objType(receiver), name->str());
 
     if(method == nullptr)
-    {
-        Value error = makeErrorResult(
-            ErrorKind::NAME_ERROR,
-            std::format(
-                "Native value has no method '{}'.",
-                name->str()),
-            receiver);
-        stackTop -= argCount + 1;
-        push(error);
-        return true;
-    }
+        return invokeExtensionMethod(receiver, name, argCount);
 
     if(argCount != method->arity)
     {
@@ -1439,6 +1523,54 @@ bool VM::invokeNativeMethod(Value receiver, ObjString* name, int argCount)
     stackTop -= argCount + 1;
     push(output);
     return true;
+}
+
+bool VM::invokeExtensionMethod(Value receiver, ObjString* name, int argCount)
+{
+    Table* extensions = extensionTable(objType(receiver));
+    Value implementation;
+    if(extensions == nullptr || !extensions->get(name, implementation))
+    {
+        Value error = makeErrorResult(
+            ErrorKind::NAME_ERROR,
+            std::format(
+                "Native value has no method '{}'.",
+                name->str()),
+            receiver);
+        stackTop -= argCount + 1;
+        push(error);
+        return true;
+    }
+
+    if(!is<ObjClosure>(implementation))
+    {
+        runtimeError("Registered extension method '{}' is not a script function.", name->str());
+        return false;
+    }
+
+    const int expected = as<ObjClosure>(implementation)->func->arity - 1;
+    if(argCount != expected)
+    {
+        Value error = makeErrorResult(
+            ErrorKind::TYPE_ERROR,
+            std::format(
+                "Method '{}()' expects {} arguments but got {}.",
+                name->str(), expected, argCount),
+            receiver);
+        stackTop -= argCount + 1;
+        push(error);
+        return true;
+    }
+
+    // Transform [receiver, args...] into the ordinary script-call layout
+    // [function, receiver, args...].
+    Value* base = stackTop - argCount - 1;
+    push(Value());
+    for(int i = argCount; i >= 0; --i)
+        base[i + 1] = base[i];
+    base[0] = implementation;
+
+    return callValue(implementation, argCount + 1);
 }
 
 bool VM::invokeClass(ObjClass* klass, ObjString* name, int argCount)
@@ -1483,6 +1615,61 @@ void VM::defineMethod(ObjString* name, bool isStatic)
     klass->members.set(name, ClassMember{method, isStatic});
     pop();
 }
+
+Table* VM::extensionTable(ObjType type)
+{
+    switch(type)
+    {
+    case ObjType::ARRAY:
+        return &arrayExt;
+    case ObjType::STRING:
+        return &stringExt;
+    case ObjType::CLOSURE:
+    case ObjType::NATIVE:
+    case ObjType::BOUND_METHOD:
+        return &functionExt;
+    default:
+        return nullptr;
+    }
+}
+
+Table* VM::extensionTable(std::string_view name)
+{
+    if(name == "array")
+        return &arrayExt;
+    if(name == "string")
+        return &stringExt;
+    if(name == "function")
+        return &functionExt;
+    return nullptr;
+}
+
+bool VM::hasExtensionType(ObjType type) const
+{
+    return type == ObjType::ARRAY ||
+        type == ObjType::STRING ||
+        type == ObjType::CLOSURE ||
+        type == ObjType::NATIVE ||
+        type == ObjType::BOUND_METHOD;
+}
+
+bool VM::nativeMethodExistsForExtensionType(
+    std::string_view typeName, std::string_view methodName) const
+{
+    if(typeName == "array")
+        return findNativeMethod(ObjType::ARRAY, methodName) != nullptr;
+    if(typeName == "string")
+        return findNativeMethod(ObjType::STRING, methodName) != nullptr;
+    if(typeName == "function")
+    {
+        return findNativeMethod(ObjType::CLOSURE, methodName) != nullptr ||
+            findNativeMethod(ObjType::NATIVE, methodName) != nullptr ||
+            findNativeMethod(ObjType::BOUND_METHOD, methodName) != nullptr;
+    }
+    return false;
+}
+
+
 
 // ----GC----
 
@@ -1541,6 +1728,9 @@ void VM::markRoots()
     markObject(initStr);
     
     markTable(globals);
+    markTable(arrayExt);
+    markTable(stringExt);
+    markTable(functionExt);
     Compiler::comp.markCompilerRoots(*this);
 }
 
@@ -1795,4 +1985,7 @@ ObjString* copyString(VM& owner, std::string_view chars)
     return string;
 }
 
-
+bool goodArity(const ObjFunction* function, int supplied)
+{
+    return function->variadic? supplied>=function->arity: supplied==function->arity;
+}

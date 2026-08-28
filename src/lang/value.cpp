@@ -1,5 +1,6 @@
 #include "value.h"
 #include "commons.h"
+#include "object.h"
 
 #ifdef NAN_BOXING
 
@@ -266,3 +267,23 @@ bool Value::operator==(std::monostate) const
 }
 
 #endif
+
+bool Value::operator<(const Value& other) const
+{
+    if(is_nil())
+        return true;
+    if(is_bool() && other.is_bool())
+        return as_bool();
+    if(is_bool())
+        return true;
+    if(is_number() && other.is_number())
+        return as_number() < other.as_number();
+    if(is_number())
+        return true;
+    if(is<ObjString>(*this) && is<ObjString>(other))
+        return as<ObjString>(*this)->str() < as<ObjString>(other)->str();
+    if(is<ObjString>(*this))
+        return true;
+
+    return true;
+}

@@ -70,6 +70,7 @@ struct ObjFunction: Obj
     int arity = 0;
     int upvalCount = 0;
     Chunk chunk;
+    bool variadic = false;
     ObjString* name = nullptr;
 
     ObjFunction(VM* owner, ObjString* functionName = nullptr):

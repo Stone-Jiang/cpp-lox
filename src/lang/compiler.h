@@ -232,6 +232,8 @@ private:
     void parameter();
     void parameterList();
     void emitClosure(const Compiler& compiler, ObjFunction* func);
+
+    void extendStmt();
 };
 
 

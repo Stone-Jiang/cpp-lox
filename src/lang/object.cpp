@@ -122,6 +122,9 @@ std::string to_string(const Obj* obj)
     case ObjType::ARRAY:
     {
         const auto& vec = as<ObjArray>(obj)->elements;
+        if(vec.empty())
+            return "[]";
+
         string s;
         s.reserve(vec.size()*3);
         s += "[";

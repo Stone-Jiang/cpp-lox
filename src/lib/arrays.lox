@@ -1,0 +1,181 @@
+fun reqUnary(fn, name) {
+    if (typeof(fn) != "fun") {
+        fail TYPE, name + "() expects a function.", fn;
+    }
+    if (fn.arity != 1) {
+        fail TYPE, name + "() callback must accept exactly one argument.", fn;
+    }
+}
+
+fun reqBinary(fn, name) {
+    if (typeof(fn) != "fun") {
+        fail TYPE, name + "() expects a function.", fn;
+    }
+    if (fn.arity != 2) {
+        fail TYPE, name + "() callback must accept exactly one argument.", fn;
+    }
+}
+
+fun map(array, fn) {
+    reqUnary(fn, "map");
+
+    var result = [];
+    for (var i = 0; i < array.len; i = i + 1) {
+        result.push(fn(array[i]));
+    }
+
+    return result;
+}
+
+fun foreach(array, fn) {
+    reqUnary(fn, "foreach");
+
+    for (var i = 0; i < array.len; i = i + 1) {
+        array[i] = fn(array[i]);
+    }
+
+    return array;
+}
+
+fun zip(fn, array1, array2) {
+    reqBinary(fn, "zip");
+
+    var n;
+    if (array1.len < array2.len) {
+        n = array1.len;
+    } 
+    else {
+        n = array2.len;
+    }
+
+    var result = [];
+    for (var i = 0; i < n; i = i + 1) {
+        result.push(fn(array1[i], array2[i]));
+    }
+
+    return result;
+}
+
+fun filter(array, fn) {
+    reqUnary(fn, "filter");
+
+    var result = [];
+    for (var i = 0; i < array.len; i = i + 1) {
+        if(fn(array[i])) {
+            result.push(array[i]);
+        }
+    }
+    return result;
+}
+
+fun fill(array, n) {
+    for (var i = 0; i < array.len; i = i + 1) {
+        array[i] = n;
+    }
+}
+
+fun foldl(array, p, fn) {
+    reqBinary(fn, "foldl");
+
+    var acc = p;
+    for (var i = 0; i < array.len; i = i + 1) {
+        acc = fn(acc, array[i]);
+    }
+    return acc;
+}
+
+fun foldr(array, p, fn) {
+    reqBinary(fn, "foldr");
+    
+    var acc = p;
+    for (var i = array.len-1; i >= 0; i = i - 1) {
+        acc = fn(array[i], acc);
+    }
+    return acc;
+}
+
+fun any(array, fn) {
+    reqUnary(fn, "any");
+
+    for (var i = 0; i < array.len; i = i + 1) {
+        if (fn(array[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fun all(array, fn) {
+    reqUnary(fn, "all");
+
+    for (var i = 0; i < array.len; i = i + 1) {
+        if (!fn(array[i])) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+fun find'(array, fn) {
+    reqUnary(fn, "find'");
+
+    for (var i = 0; i < array.len; i = i + 1) {
+        if (fn(array[i])) {
+            return i;
+        } 
+    }
+}
+
+fun count'(array, fn) {
+    reqUnary(fn, "count'");
+
+    var count = 0;
+    for (var i = 0; i < array.len; i = i + 1) {
+        if (fn(array[i])) {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+fun sort'(array, cmp) {
+    reqBinary(cmp, "sort'");
+    var n = array.len;
+
+    for (var i = 0; i < n-1; i = i + 1) {
+        for (var j = 0; j < n-1-i; j = j + 1) {
+            if (cmp(array[j], array[j+1])) {
+                var temp = array[j];
+                array[j] = array[j+1];
+                array[j+1] = temp;
+            }
+        }
+    }
+}
+
+fun intersperse(array, c) {
+    var result = [];
+    for (var i = 0; i < array.len-1; i = i + 1) {
+        result.push(array[i]);
+        result.push(c);
+    }
+    result.push(array.back());
+    return result;
+}
+
+// -----
+
+extend "array" "map" map;
+extend "array" "foreach" foreach;
+extend "array" "filter" filter;
+extend "array" "fill" fill;
+extend "array" "foldl" foldl;
+extend "array" "foldr" foldr;
+extend "array" "any" any;
+extend "array" "all" all;
+extend "array" "find'" find';
+extend "array" "count'" count';
+extend "array" "sort'" sort';
+extend "array" "intersperse" intersperse;

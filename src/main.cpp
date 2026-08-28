@@ -1,4 +1,5 @@
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 #include <iostream>
 #include "lang/vm.h"
@@ -46,6 +47,22 @@ public:
 int main(int argc, char* argv[])
 {
     VM vm;
+
+    std::error_code pathError;
+    const auto executable = std::filesystem::absolute(argv[0], pathError);
+    if(pathError)
+    {
+        std::cerr << "[library error] Could not resolve the interpreter path.\n";
+        return 74;  
+    }
+
+    const auto library = executable.parent_path() / "src" / "lib" / "arrays.lox";
+    const int libraryResult = Runtime::process(vm, library.string());
+    if(libraryResult != 0)
+    {
+        std::cerr << "[library error] Could not initialize the standard library.\n";
+        return libraryResult;
+    }
 
     if(argc==1)
         return Runtime::repl(vm);

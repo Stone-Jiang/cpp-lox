@@ -58,8 +58,11 @@ class VM
 
     Table globals;
     StringPool strings;
-
     Vector<Obj*> grayStack;
+
+    Table arrayExt;
+    Table stringExt;
+    Table functionExt;
 
 public:
     VM();
@@ -133,6 +136,12 @@ private:
     bool bindSuperMethod(ObjClass* klass, ObjString* name);
     bool invoke(ObjString* name, int argCount);
     bool invokeNativeMethod(Value receiver, ObjString* name, int argCount);
+    bool invokeExtensionMethod(Value receiver, ObjString* name, int argCount);
+    Table* extensionTable(ObjType type);
+    Table* extensionTable(std::string_view typeName);
+    bool hasExtensionType(ObjType type) const;
+    bool nativeMethodExistsForExtensionType(
+        std::string_view typeName, std::string_view methodName) const;
     bool invokeClass(ObjClass* klass, ObjString* name, int argCount);
     bool invokeSuper(ObjClass* klass, ObjString* name, int argCount);
     void defineMethod(ObjString* name, bool isStatic);
@@ -166,3 +175,4 @@ struct NormalIndexInfo
 
 NormalIndexInfo normalIndex(const Value& value, size_t length);
 
+bool goodArity(const ObjFunction* function, int supplied);

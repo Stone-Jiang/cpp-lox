@@ -237,7 +237,7 @@ NativeResult arrayFind(VM&, Value receiver, int, Value* args)
         if(array->elements[i]==args[0])
             return NativeResult::success(Value(static_cast<double>(i)));
         
-    return NativeResult::success(Value());
+    return NativeResult::success(Value(-1.0));
 }
 
 NativeResult arraySlice(VM& vm, Value receiver, int, Value* args)
@@ -300,40 +300,11 @@ NativeResult arrayJoin(VM& vm, Value receiver, int, Value* args)
     return NativeResult::success(copyString(vm, s));
 }
 
-NativeResult arrayRepeat(VM& vm, Value receiver, int, Value* args)
+NativeResult arraySort(VM&, Value receiver, int, Value*)
 {
-    const auto source = as<ObjArray>(receiver);
-    auto copy = makeObj<ObjArray>(vm);
-
-    if(!is_integral(args[0]))
-        return NativeResult::failure(ErrorKind::DOMAIN_ERROR, "Array .repeat() expects a positive integral number.", Value(source));
-    
-    int t = args[0].as_number();
-
-    if(t<0)
-        return NativeResult::failure(ErrorKind::DOMAIN_ERROR, "Array .repeat() expects a positive integral number.", Value(source));
-
-    vm.push(Value(copy));
-    try
-    {
-        copy->elements.reserve(source->len() * t);
-        for(int i=0; i<t; i++)
-            for(const Value& element: source->elements)
-                copy->elements.push_back(element);
-    }
-    catch(const std::bad_alloc&)
-    {
-        vm.pop();
-        return NativeResult::failure(ErrorKind::CRITICAL_ERROR, "Not enough memory to copy array.");
-    }
-    catch(const std::length_error&)
-    {
-        vm.pop();
-        return NativeResult::failure(ErrorKind::CRITICAL_ERROR, "Array is too large to copy.");
-    }
-    vm.pop();
-
-    return NativeResult::success(Value(copy));
+    auto array = as<ObjArray>(receiver);
+    std::sort(array->elements.begin(), array->elements.end());    
+    return NativeResult::success(Value());
 }
 
 // -----
@@ -358,7 +329,7 @@ constexpr std::array methods {
     NativeMethodDef{"slice", 2, arraySlice},
     NativeMethodDef{"join", 1, arrayJoin},
     NativeMethodDef{"find", 1, arrayFind},
-    NativeMethodDef{"repeat", 1, arrayRepeat},
+    NativeMethodDef{"sort", 0, arraySort},
 };
 
 }
