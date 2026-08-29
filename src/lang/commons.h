@@ -18,6 +18,7 @@
 #include <limits>
 
 #include "../switches.h"
+#include "../utils/file.h"
 
 using std::string;
 

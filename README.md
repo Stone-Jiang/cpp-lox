@@ -26,19 +26,22 @@ The release executable is named `main`, and the debug executable is named `debug
 ### C++ runtime structure
 
 - Core runtime concepts are represented by classes and strongly typed scoped enums instead of groups of C structs, globals, and loosely related helper functions.
+- Replaced some pointer passing with references, giving more accurate semantics and clearer ownership models.
 - Fixed-capacity VM storage uses `std::array`. Growable bytecode, constant, line, and upvalue storage uses a project `Vector<T>` implementation with complete construction, destruction, copy, move, and iteration behavior.
 - VM-owned containers report capacity changes to the runtime, allowing their backing storage to participate in garbage-collection allocation accounting.
 - Constants and type mappings use `constexpr`, inline functions, concepts, and templates where the C version relies heavily on preprocessor macros.
 - Runtime objects retain explicit `ObjType` tags. They do not use virtual methods or RTTI for dispatch, preserving the tagged-object model used by clox.
 - Runtime diagnostics use `std::format` and C++ exceptions are reserved for internal failures such as invalid access, overflow, and allocation-related errors. Lox-level failures are represented separately as runtime values.
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
+- Replaced messages and string handling with `std::string` and `std::string_view`, which provides simpler and more readable memory management with low cost.
+- Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
 
 ### Configurable value and table implementations
 
 `src/switches.h` controls two important implementation choices:
 
 - With `NAN_BOXING` enabled, `Value` uses a compact 64-bit NaN-boxed representation. Without it, the same public interface is backed by `std::variant<std::monostate, double, bool, Obj*>`.
-- With `BETTER_HASH_TABLE` enabled, globals, fields, members, and interned strings use bundled robin-hood flat hash containers. Without it, they use `std::unordered_map` and `std::unordered_set`.
+- With `BETTER_HASH_TABLE` enabled, globals, fields, members, and interned strings use bundled [robin-hood flat hash containers](https://github.com/martinus/robin-hood-hashing). Without it, they use `std::unordered_map` and `std::unordered_set`.
 - String interning supports heterogeneous lookup by `std::string_view`, so a temporary heap string is not required merely to search the intern pool.
 
 ### Native-function interface
@@ -51,9 +54,8 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 
 - Supplying one path runs that source file directly.
 - Starting the executable without arguments opens a persistent REPL.
-- Inside the terminal REPL, `-r path/to/file.lox` runs a file using the current
-  VM instance.
-- File, compile, and runtime failures use distinct exit codes (74, 65, and 70 respectively).
+- Inside the terminal REPL, `-r path/to/file.lox` runs a file using the current VM instance.
+- Inside the terminal REPL, enter `-q` to quit.
 
 ## Language Extensions
 
@@ -122,9 +124,35 @@ class Counter {
 
 Static methods participate in inherited member lookup. Instance methods remain bound to a receiver, and the compiler rejects `this` or `super` in static context. Class members can be replaced at runtime, for example `Counter.create = anotherFunction`.
 
-### Runtime type and meta information
+### Native functions
 
-The `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
+- `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
+- `system(string)` native runs a system command through C++ `system()`. **UNSAFE!! MIGHT CAUSE SERIOUS CRASHES! DO NOT PASS IN UNVERIFIED COMMANDS.**
+- `str(value)` converts everything into a string as how they would be printed.
+
+### Strings
+
+Strings are immutable and interned, same as the original design. Native string transformations build independent temporary storage and return an immutable string result; they never modify the receiver. Interning may reuse an existing object when the resulting text already exists, which is not observable through string value semantics.
+
+The read-only `len` attribute reports the number of stored bytes. The initial native methods are:
+
+- `upper()` and `lower()` return ASCII/C-locale case transformations.
+- `trim()` returns a string without leading or trailing C-locale whitespace.
+- `reverse()` returns a string with its stored bytes reversed.
+- `substr()` takes two *indices* and returns the substring at `[lo, hi)`.
+- `find()` finds the first occurrence of substring from the left; `rfind()` from the right.
+- `startswith()` and `endswith()` returns whether the string starts/ends with the given substring.
+
+```
+var original = "  Ab C  ";
+
+print original.upper();   //   AB C
+print original.trim();    // Ab C
+print original.reverse(); //   C bA
+print original;           //   Ab C
+```
+
+New native string implementations belong in `src/lib/strings.cpp`. `makeStringResult()` centralizes conversion to an interned Lox string and translates allocation failures into `CRITICAL` native errors.
 
 ### Arrays
 
@@ -289,6 +317,69 @@ value.method(a, b)
 
 Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
 
+### File I/O
+
+`open(path, mode)` returns a garbage-collected file object backed by the native `File` wrapper. The mode is optional and defaults to `"r"`. Relative paths are resolved from the process's current working directory, so the examples below should be run from the project root. File objects expose stream operations only; filesystem controls such as deleting, renaming, or listing paths are not part of this API.
+
+Supported modes use the usual `r`, `w`, and `a` forms. Adding `+` enables both reading and writing, and adding `b` selects binary mode. Opening with `w` truncates an existing file, while `a` writes at its end.
+
+This read-only example opens the project's existing `README.md`:
+
+```
+var file = open("README.md"); // equivalent to open("README.md", "r")
+
+print file;          // <file README.md (r, o)>
+print file.name;     // README.md
+print file.mode;     // r
+print file.readable; // true
+print file.writable; // false
+print file.closed;   // false
+print file.size;     // size in bytes
+
+print file.read(80); // read at most 80 bytes
+print file.tell();   // 80
+file.seek(0);        // return to the beginning
+print file.readline();
+
+file.close();
+print file.closed;   // true
+```
+
+Writing uses the same object and mutates the underlying stream:
+
+```
+var output = open("notes.txt", "w");
+print output.write("hello"); // 5
+output.flush();
+output.close();
+
+var input = open("notes.txt");
+print input.read(); // hello
+input.close();
+```
+
+File attributes are read-only:
+
+- `name` is the path supplied to `open()` and `mode` is the parsed mode string.
+- `closed`, `readable`, `writable`, and `seekable` report the current stream capabilities.
+- `eof` reports whether the stream has encountered end-of-file.
+- `size` reports the file's size in bytes.
+
+Methods are:
+
+- `read()` reads the remainder; `read(n)` reads at most `n` bytes.
+- `readline()` returns the next line or `nil` at end of file.
+- `readlines()` returns the remaining lines as an array of strings.
+- `write(string)` writes and returns the byte count.
+- `writelines(array)` writes an array whose elements must all be strings.
+- `seek(offset)` and `seek(offset, whence)` reposition the stream; `whence` is `0`, `1`, or `2` for start, current position, or end.
+- `tell()` returns the current byte position.
+- `flush()` and `close()` perform the corresponding stream operation and return `nil`.
+
+`readline()` preserves a trailing newline when the source line has one. `readlines()` follows the same rule for each returned element. Calls made after `close()`, reads from a write-only stream, writes to a read-only stream, and failures to open a path produce `IO` error values. Invalid arguments become `TYPE`, `VALUE`, or `RANGE` errors.
+
+The binding validates Lox values and delegates I/O and stream-state handling to the corresponding native `File` object. Assignment aliases the same file object; it does not duplicate an operating-system stream. A reachable file object keeps its stream alive, while an unreachable one is closed by RAII during garbage collection. Explicit `close()` remains recommended because garbage collection timing is intentionally unspecified.
+
 ### Lambdas / Anonymous functions
 
 A lambda is defined in Haskell-fashion as `var a = \x => x + 1;`. They follow the same rules as functions in terms of being first-class, capable of assignment, capturing closures etc., but they can be anonymous. They can also be used on-spot.
@@ -391,7 +482,7 @@ python playground/server.py
 
 Then open <http://127.0.0.1:8765> in a browser.
 
-#### Running a source file
+### Running a source file
 
 1. Select **Open file** in the toolbar above the left pane.
 2. Choose a `.lox` or plain-text source file from your computer.
@@ -399,14 +490,14 @@ Then open <http://127.0.0.1:8765> in a browser.
 4. Select **Run**, or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS).
 5. Read the program output and exit status in the right pane.
 
-#### Using the REPL
+### Using the REPL
 
 1. Select the **REPL** tab in the right pane.
 2. Enter a Craft expression or statement and select **Send**.
 3. Continue entering commands in the same persistent session.
 4. Select **Reset** to discard the current REPL state and start a fresh session.
 
-#### Server options
+### Server options
 
 By default, the server uses `main.exe`, binds to `127.0.0.1`, and listens on port `8765`. A different executable or port can be selected when starting it:
 

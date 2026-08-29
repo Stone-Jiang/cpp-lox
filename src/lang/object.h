@@ -5,10 +5,11 @@
 #include "table.h"
 #include "native.h"
 #include <complex>
+#include <fstream>
 #include <utility>
 #include <concepts>
 
-void prepareObjAllocation(VM* owner, size_t size);
+void prepareObjAlloc(VM* owner, size_t size);
 void allocObj(VM* owner, Obj* object, size_t size);
 
 enum class ObjType
@@ -25,6 +26,7 @@ enum class ObjType
     COMPLEX, 
     UPVALUE,
     ARRAY,
+    FILE,
     NONE // for debug only
 };
 
@@ -167,6 +169,15 @@ struct ObjArray: Obj
     ObjArray(VM* owner): Obj(owner, basetype), elements(owner) {}
 };
 
+struct ObjFile: Obj
+{
+    static constexpr ObjType basetype = ObjType::FILE;
+    utils::File file;
+
+    ObjFile(VM* owner, const std::string& path, const std::string& mode): Obj(owner, ObjType::FILE), file(path, mode) {}
+};
+
+// -----
 
 ObjType objType(const Value& value);
 bool isType(const Value& value, ObjType type);
@@ -209,7 +220,7 @@ template <Objective T, typename... Args>
 T* makeObj(VM& owner, Args&&... args)
 {
     constexpr size_t size = sizeof(T);
-    prepareObjAllocation(&owner, size);
+    prepareObjAlloc(&owner, size);
 
     T* object = new T(&owner, std::forward<Args>(args)...);
     allocObj(&owner, object, size);

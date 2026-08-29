@@ -1,6 +1,6 @@
-fun hello(x) {
-    print "hello from " + str(x);
-}
-
-var a = [3, 1, 4, 1, 5];
-a.foreach(hello);
+var a = "abcdefa";
+print a.find("bc");
+print a.find("af");
+print a.find("a");
+print a.rfind("a");
+print a.find(nil);

@@ -49,7 +49,7 @@ void Table::ensureCapacity(size_t entries)
 
     const size_t oldBytes = slotStorageBytes(accountedSlots);
     const size_t newBytes = slotStorageBytes(newSlots);
-    prepareAllocation(owner, oldBytes, newBytes);
+    prepareAlloc(owner, oldBytes, newBytes);
     m.reserve(entries);
     trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
@@ -147,7 +147,7 @@ void MemberTable::ensureCapacity(size_t entries)
 
     const size_t oldBytes = slotStorageBytes(accountedSlots);
     const size_t newBytes = slotStorageBytes(newSlots);
-    prepareAllocation(owner, oldBytes, newBytes);
+    prepareAlloc(owner, oldBytes, newBytes);
     m.reserve(entries);
     trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;
@@ -269,7 +269,7 @@ void StringPool::ensureCapacity(size_t entries)
 
     const size_t oldBytes = slotStorageBytes(accountedSlots);
     const size_t newBytes = slotStorageBytes(newSlots);
-    prepareAllocation(owner, oldBytes, newBytes);
+    prepareAlloc(owner, oldBytes, newBytes);
     m.reserve(entries);
     trackAlloc(owner, oldBytes, newBytes);
     accountedSlots = newSlots;

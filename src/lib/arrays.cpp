@@ -203,7 +203,7 @@ NativeResult arrayFront(VM&, Value receiver, int, Value*)
     auto array = as<ObjArray>(receiver);
     if(array->elements.empty())
     {
-        return NativeResult::failure(ErrorKind::INDEX_ERROR, "Can't pop from an empty array.");
+        return NativeResult::failure(ErrorKind::INDEX_ERROR, "No front() for an empty array.");
     }
     return NativeResult::success(Value(array->elements.front()));
 }
@@ -213,7 +213,7 @@ NativeResult arrayBack(VM&, Value receiver, int, Value*)
     auto array = as<ObjArray>(receiver);
     if(array->elements.empty())
     {
-        return NativeResult::failure(ErrorKind::INDEX_ERROR, "Can't pop from an empty array.");
+        return NativeResult::failure(ErrorKind::INDEX_ERROR, "No back() for  an empty array.");
     }
     return NativeResult::success(Value(array->elements.back()));
 }
@@ -229,17 +229,6 @@ NativeResult arrayCount(VM&, Value receiver, int, Value* args)
     return NativeResult::success(Value(static_cast<double>(count)));
 }
 
-NativeResult arrayFind(VM&, Value receiver, int, Value* args)
-{
-    auto array = as<ObjArray>(receiver);
-
-    for(size_t i = 0; i<array->len(); i++)
-        if(array->elements[i]==args[0])
-            return NativeResult::success(Value(static_cast<double>(i)));
-        
-    return NativeResult::success(Value(-1.0));
-}
-
 NativeResult arraySlice(VM& vm, Value receiver, int, Value* args)
 {
     auto array = as<ObjArray>(receiver);
@@ -252,8 +241,6 @@ NativeResult arraySlice(VM& vm, Value receiver, int, Value* args)
         return makeIndexError(lo, array->len(), rlo.result);
     if(rhi.result!=IndexResult::OK && rhi.result!=IndexResult::END)
         return makeIndexError(hi, array->len(), rhi.result);
-    
-
     if(rlo.index > rhi.index)
         return NativeResult::failure(ErrorKind::VALUE_ERROR, "Slice lo is greater than hi.", Value());
 
@@ -328,7 +315,6 @@ constexpr std::array methods {
     NativeMethodDef{"count", 1, arrayCount},
     NativeMethodDef{"slice", 2, arraySlice},
     NativeMethodDef{"join", 1, arrayJoin},
-    NativeMethodDef{"find", 1, arrayFind},
     NativeMethodDef{"sort", 0, arraySort},
 };
 

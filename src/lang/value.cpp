@@ -270,20 +270,34 @@ bool Value::operator==(std::monostate) const
 
 bool Value::operator<(const Value& other) const
 {
-    if(is_nil())
-        return true;
-    if(is_bool() && other.is_bool())
-        return as_bool();
-    if(is_bool())
-        return true;
-    if(is_number() && other.is_number())
-        return as_number() < other.as_number();
-    if(is_number())
-        return true;
-    if(is<ObjString>(*this) && is<ObjString>(other))
-        return as<ObjString>(*this)->str() < as<ObjString>(other)->str();
-    if(is<ObjString>(*this))
-        return true;
+    const auto rank = [](const Value& value) {
+        if(value.is_nil()) return 0;
+        if(value.is_bool()) return 1;
+        if(value.is_number()) return 2;
+        if(is<ObjString>(value)) return 3;
+        return 4;
+    };
 
-    return true;
+    const int leftRank = rank(*this);
+    const int rightRank = rank(other);
+    if(leftRank != rightRank)
+        return leftRank < rightRank;
+
+    if(is_bool())
+        return !as_bool() && other.as_bool();
+    if(is_number())
+    {
+        const double left = as_number();
+        const double right = other.as_number();
+        if(std::isnan(left))
+            return false;
+        if(std::isnan(right))
+            return true;
+        return left < right;
+    }
+    if(is<ObjString>(*this))
+        return as<ObjString>(*this)->str() < as<ObjString>(other)->str();
+
+    // Nil and non-string objects are equivalent for ordering purposes.
+    return false;
 }

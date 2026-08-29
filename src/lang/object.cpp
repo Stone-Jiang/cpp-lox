@@ -92,7 +92,7 @@ std::string to_string(const Value& value)
 std::string to_string(const Obj* obj)
 {
     if(obj==nullptr)
-        return "?";
+        return "nullptr";
     switch (obj->type)
     {
     case ObjType::FUNCTION:
@@ -137,9 +137,16 @@ std::string to_string(const Obj* obj)
         s += "]";
         return s;
     }
-    default:
+    case ObjType::FILE:
+    {
+        auto f = as<ObjFile>(obj);
+        return std::format("<file {} ({}, {})>", f->file.name(), f->file.mode(), f->file.closed()? "c": "o");
+    }
+    case ObjType::OBJ:
+    case ObjType::NONE:
         return "<obj ?>";
     }
+    return "?";
 }
 
 std::string to_string(const ObjFunction* func)

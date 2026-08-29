@@ -1,6 +1,8 @@
 #include "native.h"
 #include "../lib/arrays.h"
 #include "../lib/functions.h"
+#include "../lib/files.h"
+#include "../lib/strings.h"
 #include "object.h"
 
 #include <array>
@@ -72,8 +74,23 @@ NativeResult typeNative(VM& vm, int, Value* args)
         case ObjType::ARRAY:
             type = "array";
             break;
-        default:
-            type = "object";
+        case ObjType::FILE:
+            type = "file";
+            break;
+        case ObjType::STRING:
+            type = "string";
+            break;
+        case ObjType::COMPLEX:
+            type = "complex";
+            break;
+        case ObjType::UPVALUE:
+            type = "upvalue";
+            break;
+        case ObjType::OBJ:
+            type = "obj?";
+            break;
+        case ObjType::NONE:
+            type = "none?";
             break;
         }
     }
@@ -91,11 +108,42 @@ NativeResult integralNative(VM&, int, Value* args)
     return NativeResult::success(Value(is_integral(args[0])));
 }
 
+NativeResult systemNative(VM&, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "system() expects a string.", Value());
+
+    system(as_cstr(args[0]));
+    return NativeResult::success(Value());
+}
+
+NativeResult stodNative(VM&, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "tod() expects a string.", Value());
+
+    try 
+    {
+        double temp = std::stod(as<ObjString>(args[0])->str());
+        return NativeResult::success(Value(temp));
+    }
+    catch(const std::invalid_argument&)
+    {
+        return NativeResult::failure(ErrorKind::VALUE_ERROR, "This string cannot be converted to number.", Value(0.0));
+    }
+    catch(const std::out_of_range&)
+    {
+        return NativeResult::failure(ErrorKind::VALUE_ERROR, "This string exceeds the limits of number.", Value(0.0));
+    }
+}
+
 constexpr std::array definitions {
     NativeDef{"clock", 0, clockNative},
     NativeDef{"typeof", 1, typeNative},
     NativeDef{"str", 1, strNative},
     NativeDef{"integral", 1, integralNative},
+    NativeDef{"system", 1, systemNative},
+    NativeDef{"stod", 1, stodNative},
 };
 
 }
@@ -114,8 +162,12 @@ std::span<const NativeTypeDef> nativeTypeDefinitions() noexcept
             arrayNativeMethods()},
         NativeTypeDef{
             ObjType::STRING,
-            {},
-            {}},
+            stringNativeProperties(),
+            stringNativeMethods()},
+        NativeTypeDef{
+            ObjType::FILE,
+            fileNativeProperties(),
+            fileNativeMethods()},
         NativeTypeDef{
             ObjType::CLOSURE,
             functionNativeProperties(),

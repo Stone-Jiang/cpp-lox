@@ -1,4 +1,5 @@
 #include "vm.h"
+#include "../lib/files.h"
 #include "../lib/math.h"
 #include <algorithm>
 
@@ -99,7 +100,7 @@ size_t objectExtraBytes(const Obj* object)
     switch(object->type)
     {
     case ObjType::STRING:
-        return saturatingAdd(static_cast<const ObjString*>(object)->chars.capacity(), 1);
+        return saturatingAdd(as<ObjString>(object)->chars.capacity(), 1);
     case ObjType::ARRAY:
         return 0;
     default:
@@ -221,6 +222,9 @@ VM::VM():
         defineNative(nat);
 
     for(const auto& nat: mathNativeDefinitions())
+        defineNative(nat);
+
+    for(const auto& nat: fileNativeDefinitions())
         defineNative(nat);
 }
 
@@ -1005,39 +1009,39 @@ void VM::freeObj(Obj* object)
     {
     case ObjType::CLASS:
         size = saturatingAdd(sizeof(ObjClass), objectExtraBytes(object));
-        delete static_cast<ObjClass*>(object);
+        delete as<ObjClass>(object);
         break;
     case ObjType::ERROR:
         size = sizeof(ObjError);
-        delete static_cast<ObjError*>(object);
+        delete as<ObjError>(object);
         break;
     case ObjType::INSTANCE:
         size = sizeof(ObjInstance);
-        delete static_cast<ObjInstance*>(object);
+        delete as<ObjInstance>(object);
         break;
     case ObjType::STRING:
         size = saturatingAdd(sizeof(ObjString), objectExtraBytes(object));
-        delete static_cast<ObjString*>(object);
+        delete as<ObjString>(object);
         break;
     case ObjType::FUNCTION:  
         size = saturatingAdd(sizeof(ObjFunction), objectExtraBytes(object));
-        delete static_cast<ObjFunction*>(object);
+        delete as<ObjFunction>(object);
         break;
     case ObjType::NATIVE:
         size = sizeof(ObjNative);
-        delete static_cast<ObjNative*>(object);
+        delete as<ObjNative>(object);
         break;
     case ObjType::CLOSURE:
         size = sizeof(ObjClosure);
-        delete static_cast<ObjClosure*>(object);
+        delete as<ObjClosure>(object);
         break;
     case ObjType::UPVALUE:
         size = sizeof(ObjUpvalue);
-        delete static_cast<ObjUpvalue*>(object);
+        delete as<ObjUpvalue>(object);
         break;
     case ObjType::BOUND_METHOD:
         size = sizeof(ObjBoundMethod);
-        delete static_cast<ObjBoundMethod*>(object);
+        delete as<ObjBoundMethod>(object);
         break;
     case ObjType::COMPLEX:
         size = sizeof(ObjComplex);
@@ -1046,6 +1050,10 @@ void VM::freeObj(Obj* object)
     case ObjType::ARRAY:
         size = sizeof(ObjArray);
         delete as<ObjArray>(object);
+        break;
+    case ObjType::FILE:
+        size = sizeof(ObjFile);
+        delete as<ObjFile>(object);
         break;
     default:
         delete object;
@@ -1093,8 +1101,7 @@ bool VM::complexBinaryOp(Op op)
 
     if(is<ObjComplex>(left) || is<ObjComplex>(right))
     {
-        auto* value = makeObj<ObjComplex>(*this,
-            result.real(), result.imag());
+        auto* value = makeObj<ObjComplex>(*this, result.real(), result.imag());
         pop();
         pop();
         push(Value(value));
@@ -1494,7 +1501,7 @@ bool VM::invokeNativeMethod(Value receiver, ObjString* name, int argCount)
     if(method == nullptr)
         return invokeExtensionMethod(receiver, name, argCount);
 
-    if(argCount != method->arity)
+    if(method->arity >= 0 && argCount != method->arity)
     {
         Value error = makeErrorResult(
             ErrorKind::TYPE_ERROR,
@@ -1644,7 +1651,7 @@ Table* VM::extensionTable(std::string_view name)
     return nullptr;
 }
 
-bool VM::hasExtensionType(ObjType type) const
+bool VM::hasExtType(ObjType type) const
 {
     return type == ObjType::ARRAY ||
         type == ObjType::STRING ||
@@ -1668,8 +1675,6 @@ bool VM::nativeMethodExistsForExtensionType(
     }
     return false;
 }
-
-
 
 // ----GC----
 
@@ -1719,10 +1724,10 @@ void VM::markRoots()
         markValue(*slot);
     
     for(int i=0; i<frameCount; ++i)
-        markObject(static_cast<Obj*>(frames[i].clos));
+        markObject(as<Obj>(frames[i].clos));
 
     for(auto upval = openUpvalues; upval!=nullptr; upval = upval->next)
-        markObject(static_cast<Obj*>(upval));
+        markObject(as<Obj>(upval));
 
     markObject(temporaryRoot);
     markObject(initStr);
@@ -1833,28 +1838,28 @@ void VM::blackenObject(Obj* object)
     }
     case ObjType::INSTANCE:
     {
-        auto inst = static_cast<ObjInstance*>(object);
-        markObject(static_cast<Obj*>(inst->klass));
+        auto inst = as<ObjInstance>(object);
+        markObject(as<Obj>(inst->klass));
         markTable(inst->fields);
         break;
     }
     case ObjType::CLOSURE:
     {
-        auto closure = static_cast<ObjClosure*>(object);
-        markObject(static_cast<Obj*>(closure->func));
+        auto closure = as<ObjClosure>(object);
+        markObject(as<Obj>(closure->func));
         for(auto upv: closure->upvalues)
-            markObject(static_cast<Obj*>(upv));
+            markObject(as<Obj>(upv));
         break;
     }
     case ObjType::FUNCTION:
     {
-        auto func = static_cast<ObjFunction*>(object);
+        auto func = as<ObjFunction>(object);
         markObject(func->name);
         markArray(func->chunk.constants);
         break;
     }
     case ObjType::UPVALUE:
-        markValue(static_cast<ObjUpvalue*>(object)->closed);
+        markValue(as<ObjUpvalue>(object)->closed);
         break;
     case ObjType::ARRAY:
     {
@@ -1866,6 +1871,7 @@ void VM::blackenObject(Obj* object)
     case ObjType::NATIVE:
     case ObjType::STRING:
     case ObjType::COMPLEX:
+    case ObjType::FILE:
         break;
     case ObjType::OBJ:
     case ObjType::NONE:
@@ -1909,7 +1915,7 @@ void VM::sweep()
 
 // -------
 
-void prepareAllocation(VM* owner, size_t oldSize, size_t newSize)
+void prepareAlloc(VM* owner, size_t oldSize, size_t newSize)
 {
     if(owner == nullptr || newSize <= oldSize || !owner->gcEnabled || owner->isCollecting)
         return;
@@ -1943,9 +1949,9 @@ void trackAlloc(VM* owner, size_t oldSize, size_t newSize)
     }
 }
 
-void prepareObjAllocation(VM* owner, size_t size)
+void prepareObjAlloc(VM* owner, size_t size)
 {
-    prepareAllocation(owner, 0, size);
+    prepareAlloc(owner, 0, size);
 }
 
 void allocObj(VM* owner, Obj* p, size_t size)
@@ -1967,7 +1973,7 @@ ObjString* copyString(VM& owner, std::string_view chars)
     if(ObjString* interned = owner.strings.find(chars); interned != nullptr)
         return interned;
 
-    prepareAllocation(&owner, 0,
+    prepareAlloc(&owner, 0,
         saturatingAdd(sizeof(ObjString), saturatingAdd(chars.size(), 1)));
     auto* string = makeObj<ObjString>(owner, std::string(chars));
     Obj* previousRoot = owner.temporaryRoot;

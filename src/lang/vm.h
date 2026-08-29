@@ -37,7 +37,7 @@ class VM
     friend class TempRootGuard;
 
     friend void allocObj(VM*, Obj*, size_t);
-    friend void prepareAllocation(VM*, size_t, size_t);
+    friend void prepareAlloc(VM*, size_t, size_t);
     friend void trackAlloc(VM*, size_t, size_t);
     friend ObjString* copyString(VM&, std::string_view);
 
@@ -139,7 +139,7 @@ private:
     bool invokeExtensionMethod(Value receiver, ObjString* name, int argCount);
     Table* extensionTable(ObjType type);
     Table* extensionTable(std::string_view typeName);
-    bool hasExtensionType(ObjType type) const;
+    bool hasExtType(ObjType type) const;
     bool nativeMethodExistsForExtensionType(
         std::string_view typeName, std::string_view methodName) const;
     bool invokeClass(ObjClass* klass, ObjString* name, int argCount);

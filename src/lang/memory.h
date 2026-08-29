@@ -10,7 +10,7 @@
 #include <utility>
 
 class VM;
-void prepareAllocation(VM* owner, size_t oldSize, size_t newSize);
+void prepareAlloc(VM* owner, size_t oldSize, size_t newSize);
 void trackAlloc(VM* owner, size_t oldSize, size_t newSize);
 
 template <typename T>
@@ -68,7 +68,7 @@ public:
     {
         if(other.sz>0)
         {
-            prepareAllocation(owner, 0, sizeof(T) * other.sz);
+            prepareAlloc(owner, 0, sizeof(T) * other.sz);
             void* raw = ::operator new(sizeof(T)*other.sz);
             arr = static_cast<T*>(raw);
             cap = other.sz;
@@ -507,7 +507,7 @@ void Vector<T>::reserve(size_t newcap)
     if(newcap <= cap)
         return;
 
-    prepareAllocation(owner, cap * sizeof(T), newcap * sizeof(T));
+    prepareAlloc(owner, cap * sizeof(T), newcap * sizeof(T));
     void* raw = ::operator new(sizeof(T) * newcap);
     T* newdata = static_cast<T*>(raw);
     size_t i = 0;
