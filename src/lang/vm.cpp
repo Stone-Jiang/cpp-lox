@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "../lib/files.h"
 #include "../lib/math.h"
+#include "../utils/color.h"
 #include <algorithm>
 
 Compiler Compiler::comp{};
@@ -278,6 +279,8 @@ Result VM::run()
         printf("          ");
         for(auto it=stack.data(); it!=stackTop; ++it)
         {
+            utils::TerminalColor<utils::Color::Green> color;
+            utils::TerminalColor<utils::Color::Dim> style;
             printf("[ ");
             printValue(*it);
             printf(" ]");
@@ -989,6 +992,10 @@ Value VM::makeIndexError(Value index, size_t length, IndexResult reason)
 
 void VM::freeObjs()
 {
+    #ifdef DEBUG_LOG_GC
+    utils::TerminalColor<utils::Color::Cyan> color;
+    #endif
+    
     while(objects != nullptr)
     {
         Obj* object = objects;
@@ -1686,6 +1693,7 @@ void VM::collectGarbage()
     isCollecting = true;
 
     #ifdef DEBUG_LOG_GC
+    utils::TerminalColor<utils::Color::Cyan> color;
     printf("-- gc begin\n");
     size_t before = bytesAlloc;
     #endif
@@ -1753,6 +1761,7 @@ void VM::markObject(Obj* object)
         return;
 
     #ifdef DEBUG_LOG_GC
+    utils::TerminalColor<utils::Color::Cyan> color;
     printf("%p mark ", (void*)object);
     printValue(Value(object));
     printf("\n");
@@ -1762,7 +1771,7 @@ void VM::markObject(Obj* object)
 
     grayStack.push_back(object);
     if(grayStack.empty())
-        exit(1);
+        throw std::runtime_error("gray stack unexpectedly empty");
 }
 
 void VM::markTable(Table& table)
@@ -1807,6 +1816,7 @@ void VM::traceRefs()
 void VM::blackenObject(Obj* object)
 {
     #ifdef DEBUG_LOG_GC
+    utils::TerminalColor<utils::Color::Cyan> color;
     printf("%p blacken ", (void*)object);
     printValue(Value(object));
     printf("\n");
@@ -1959,6 +1969,7 @@ void allocObj(VM* owner, Obj* p, size_t size)
     const size_t allocationSize = saturatingAdd(size, objectExtraBytes(p));
 
     #ifdef DEBUG_LOG_GC
+    utils::TerminalColor<utils::Color::Cyan> color;
     printf("%p allocate %zu for %d\n",
         (void*)p, allocationSize, static_cast<int>(p->type));
     #endif

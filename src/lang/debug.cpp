@@ -1,7 +1,9 @@
 #include "debug.h"
+#include "../utils/color.h"
 
 void Debug::disassembleChunk(Chunk& chunk, const string& name)
 {
+    utils::TerminalColor<utils::Color::BrightGreen> color;
     printf("== %s ==\n", name.c_str());
     for (int offset = 0; offset < chunk.size();)
         offset = disassembleInstruction(chunk, offset);
@@ -9,6 +11,8 @@ void Debug::disassembleChunk(Chunk& chunk, const string& name)
 
 int Debug::disassembleInstruction(Chunk& chunk, int offset)
 {
+    utils::TerminalColor<utils::Color::Green> color;
+    utils::TerminalColor<utils::Color::Dim> style;
     printf("%04d ", offset);
 
     if (offset>0 && chunk.lines[offset]==chunk.lines[offset-1])

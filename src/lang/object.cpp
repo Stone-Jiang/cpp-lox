@@ -1,5 +1,5 @@
 #include "object.h"
-
+#include "../utils/color.h"
 #include <iomanip>
 
 ObjType objType(const Value& value)

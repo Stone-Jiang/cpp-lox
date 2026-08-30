@@ -1,12 +1,14 @@
 **This is a C++20 implementation of the bytecode VM of (a superset of) Lox from [*Crafting Interpreters*](https://craftinginterpreters.com/), extended beyond the original C implementation of clox.**
 
-The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string interning, and mark-and-sweep garbage collector retain the overall clox architecture. The implementation uses C++ types and lifetime management while keeping the runtime based on compact tagged values and objects rather than a virtual C++ class hierarchy.
+The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string interning, and mark-and-sweep garbage collector retain the overall clox architecture. 
+
+The implementation uses C++ types and lifetime management while keeping the runtime based on compact tagged values and objects rather than a virtual C++ class hierarchy.
 
 ## Requirements and Building
 
-- Probably a 64-bit machine (not tested on 32-bit machines)
-- Python 3 (for playground and incremental build script)
 - A C++ **20** compiler available as `g++`, `clang++`, or `MSVC`.
+- Probably a 64-bit machine (not tested on 32-bit machines)
+- Python 3 (for custom build & playground.) **Not required for if you don't need these two features.**
 
 The included incremental build script discovers sources under `src/`, tracks transitive local-header dependencies, and compiles independent files in parallel (not required, can be replaced with `make` or `cmake`). 
 
@@ -25,16 +27,17 @@ The release executable is named `main`, and the debug executable is named `debug
 
 ### C++ runtime structure
 
-- Core runtime concepts are represented by classes and strongly typed scoped enums instead of groups of C structs, globals, and loosely related helper functions.
+- Core runtime concepts are represented by C++ classes, strongly typed enums, and templated functions instead of groups of C structs, enums, and loosely related helper functions.
+- Runtime objects retain explicit `ObjType` tags. They do not use virtual methods or RTTI for dispatch, preserving the tagged-object model used by clox.
+- Constants and type mappings use `constexpr`, inline functions, concepts, and templates where the C version relies heavily on preprocessor macros. Under optimization, these C++ expressions are expanded at compile-time, causing no runtime costs.
 - Replaced some pointer passing with references, giving more accurate semantics and clearer ownership models.
 - Fixed-capacity VM storage uses `std::array`. Growable bytecode, constant, line, and upvalue storage uses a project `Vector<T>` implementation with complete construction, destruction, copy, move, and iteration behavior.
 - VM-owned containers report capacity changes to the runtime, allowing their backing storage to participate in garbage-collection allocation accounting.
-- Constants and type mappings use `constexpr`, inline functions, concepts, and templates where the C version relies heavily on preprocessor macros.
-- Runtime objects retain explicit `ObjType` tags. They do not use virtual methods or RTTI for dispatch, preserving the tagged-object model used by clox.
 - Runtime diagnostics use `std::format` and C++ exceptions are reserved for internal failures such as invalid access, overflow, and allocation-related errors. Lox-level failures are represented separately as runtime values.
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
 - Replaced messages and string handling with `std::string` and `std::string_view`, which provides simpler and more readable memory management with low cost.
 - Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
+- Added colors in debug mode. **Please use `-q` to quit! Using `ctrl c` might make your terminal cyan!**.
 
 ### Configurable value and table implementations
 
@@ -72,7 +75,7 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 - Apostrophe-suffixed functions such as `sqrt'`, `sin'`, and `acos'` accept complex input. Apostrophes are valid identifier characters for this purpose.
 - `real`, `imag`, `abs`, `arg`, `mag`, and `conj` expose common complex-number operations.
 - Native math functions validate types, domains, ranges, and finite results instead of silently passing invalid results through the VM.
-- The numeric system directly uses C++ library functions with the same behavior, meaning that mathematically true expressions like `sin(1)/cos(1)==tan(1)` might evaluate to false. The only small change is that a value near zero (by 1e-11) is approximated to zero.
+- The numeric system directly uses C++ operations and library functions, meaning that there are floating-point inaccuracies and mathematically true expressions like `sin(1)/cos(1)==tan(1)` might evaluate to false. The only small change is that a value near zero (by 1e-11) is approximated to zero. If you want to compare whether two numbers are equal under a margin of error, use `~=`.
 
 ### Error values and recovery
 
@@ -214,6 +217,7 @@ Arrays provide these native methods:
 - `slice(lo, hi)` returns a shallow half-open slice `[lo, hi)`. The upper bound may equal `len`.
 - `join(separator)` converts the elements to strings and joins them with a string separator.
 - `sort()` sorts the array in place using the runtime's ordinary value ordering and returns `nil`.
+- `==` compares whether two arrays are the *same* array. If you want to compare element-wise at $O(n)$ , use `~=`.
 
 ```
 var a = [1, 3];
@@ -323,7 +327,7 @@ Extension sugar currently applies to direct calls. Merely reading an extension, 
 
 Supported modes use the usual `r`, `w`, and `a` forms. Adding `+` enables both reading and writing, and adding `b` selects binary mode. Opening with `w` truncates an existing file, while `a` writes at its end.
 
-This read-only example opens the project's existing `README.md`:
+You can see more in examples/file_io.lox, which reads in the local readme.md file.
 
 ```
 var file = open("README.md"); // equivalent to open("README.md", "r")
@@ -335,12 +339,10 @@ print file.readable; // true
 print file.writable; // false
 print file.closed;   // false
 print file.size;     // size in bytes
-
 print file.read(80); // read at most 80 bytes
 print file.tell();   // 80
 file.seek(0);        // return to the beginning
 print file.readline();
-
 file.close();
 print file.closed;   // true
 ```
@@ -352,21 +354,18 @@ var output = open("notes.txt", "w");
 print output.write("hello"); // 5
 output.flush();
 output.close();
-
 var input = open("notes.txt");
 print input.read(); // hello
 input.close();
 ```
 
 File attributes are read-only:
-
 - `name` is the path supplied to `open()` and `mode` is the parsed mode string.
 - `closed`, `readable`, `writable`, and `seekable` report the current stream capabilities.
 - `eof` reports whether the stream has encountered end-of-file.
 - `size` reports the file's size in bytes.
 
 Methods are:
-
 - `read()` reads the remainder; `read(n)` reads at most `n` bytes.
 - `readline()` returns the next line or `nil` at end of file.
 - `readlines()` returns the remaining lines as an array of strings.

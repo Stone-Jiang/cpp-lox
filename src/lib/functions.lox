@@ -1,0 +1,30 @@
+fun twice(fn, i) {
+    reqUnary(fn, "twice");
+
+    return fn(fn(i));
+}
+
+fun thrice(fn, i) {
+    reqUnary(fn, "thrice");
+
+    return fn(fn(fn(i)));
+}
+
+fun iterate(fn, p, n) {
+    reqUnary(fn, "iterate");
+
+    var acc = p;
+    var result = [];
+
+    for (var i = 0; i < n; i = i+1) {
+        result.push(acc);
+        acc = fn(acc);
+    }
+
+    return result;
+}
+
+
+extend "function" "twice" twice;
+extend "function" "thrice" thrice;
+extend "function" "iterate" iterate;

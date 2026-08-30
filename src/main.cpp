@@ -56,12 +56,13 @@ int main(int argc, char* argv[])
         return 74;  
     }
 
-    const auto library = executable.parent_path() / "src" / "lib" / "arrays.lox";
-    const int libraryResult = Runtime::process(vm, library.string());
+    const auto arrayLib = executable.parent_path() / "src" / "lib" / "arrays.lox";
+    const auto funcLib = executable.parent_path() / "src" / "lib" / "functions.lox";
+    const int libraryResult = Runtime::process(vm, arrayLib.string()) + Runtime::process(vm, funcLib.string());
     if(libraryResult != 0)
     {
         std::cerr << "[library error] Could not initialize the standard library.\n";
-        return libraryResult;
+        return 78;
     }
 
     if(argc==1)
