@@ -121,21 +121,11 @@ std::string to_string(const Obj* obj)
         return formatComplex(as<ObjComplex>(obj)->c);
     case ObjType::ARRAY:
     {
-        const auto& vec = as<ObjArray>(obj)->elements;
-        if(vec.empty())
-            return "[]";
-
-        string s;
-        s.reserve(vec.size()*3);
-        s += "[";
-        for (size_t i = 0; i < vec.size()-1; i++)
-        {
-            s += to_string(vec[i]);
-            s += ", ";
-        }
-        s += to_string(vec[vec.size()-1]);
-        s += "]";
-        return s;
+        return to_string(as<ObjArray>(obj));
+    }
+    case ObjType::MAP:
+    {
+        return to_string(as<ObjMap>(obj));
     }
     case ObjType::FILE:
     {
@@ -159,6 +149,43 @@ std::string to_string(const ObjFunction* func)
         return std::format("<fn {}>", func->name->str());
 }
 
+std::string to_string(const ObjArray* array)
+{
+    const auto& vec = array->elements;
+    if(vec.empty())
+        return "[]";
+
+    std::string buf = "[";
+    buf.reserve(vec.size() * 3);
+    for (size_t i = 0; i < vec.size()-1; i++)
+    {
+        buf += to_string(vec[i]);
+        buf += ", ";
+    }
+    buf += to_string(vec[vec.size()-1]);
+    buf += "]";
+    return buf;
+}
+
+std::string to_string(const ObjMap* map)
+{
+    const auto& vt = map->vt;
+    if(vt.empty())
+        return "{}";
+
+    std::string buf = "{";
+    buf.reserve(vt.size() * 6);
+    bool first = true;
+    vt.foreach([&buf, &first](const Value& key, const Value& val) {
+        if(!first)
+            buf += ", ";
+        first = false;
+        std::format_to(std::back_inserter(buf), "{}: {}", to_string(key), to_string(val));
+    });
+    buf += "}";
+    return buf;
+}
+
 void printValue(const Value& value)
 {
     std::printf("%s", to_string(value).c_str());
@@ -173,8 +200,6 @@ bool is_integral(const Value& value)
     if(!std::isfinite(raw))
         return false;
     if(std::trunc(raw)!=raw)
-        return false;
-    if(std::abs(raw)>MAX_INDEX)
         return false;
     
     return true;

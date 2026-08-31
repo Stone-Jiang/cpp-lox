@@ -135,7 +135,7 @@ NativeResult stringSubstr(VM& vm, Value receiver, int, Value* args)
     if(rlo.index > rhi.index)
         return NativeResult::failure(ErrorKind::VALUE_ERROR, "Substring lo is greater than hi.", Value());
 
-    return NativeResult::success(Value(copyString(vm, str->str().substr(rlo.index, rhi.index))));
+    return NativeResult::success(Value(copyString(vm, str->str().substr(rlo.index, rhi.index-rlo.index))));
 }
 
 NativeResult stringFind(VM&, Value receiver, int, Value* args)

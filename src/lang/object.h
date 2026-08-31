@@ -4,6 +4,7 @@
 #include "commons.h"
 #include "table.h"
 #include "native.h"
+#include "valuetable.h"
 #include <complex>
 #include <fstream>
 #include <utility>
@@ -27,6 +28,7 @@ enum class ObjType
     UPVALUE,
     ARRAY,
     FILE,
+    MAP,
     NONE // for debug only
 };
 
@@ -177,6 +179,19 @@ struct ObjFile: Obj
     ObjFile(VM* owner, const std::string& path, const std::string& mode): Obj(owner, ObjType::FILE), file(path, mode) {}
 };
 
+struct ObjMap: Obj
+{
+    static constexpr ObjType basetype = ObjType::MAP;
+    ValueTable vt;
+
+    ObjMap(VM* owner): Obj(owner, basetype), vt(owner) {}
+
+    inline size_t len() const
+    {
+        return vt.size();
+    }
+};
+
 // -----
 
 ObjType objType(const Value& value);
@@ -229,8 +244,10 @@ T* makeObj(VM& owner, Args&&... args)
 
 std::string to_string(const Value& value);
 std::string to_string(const Obj* obj);
-
 std::string to_string(const ObjFunction* func);
+std::string to_string(const ObjArray* array);
+std::string to_string(const ObjMap* map);
+
 void printValue(const Value& value);
 
 bool objectsEqual(Obj* left, Obj* right);

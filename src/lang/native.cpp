@@ -2,8 +2,10 @@
 #include "../lib/arrays.h"
 #include "../lib/functions.h"
 #include "../lib/files.h"
+#include "../lib/maps.h"
 #include "../lib/strings.h"
 #include "object.h"
+#include "vm.h"
 
 #include <array>
 #include <ctime>
@@ -73,6 +75,9 @@ NativeResult typeNative(VM& vm, int, Value* args)
                 copyString(vm, as<ObjInstance>(args[0])->klass->name->str())));
         case ObjType::ARRAY:
             type = "array";
+            break;
+        case ObjType::MAP:
+            type = "map";
             break;
         case ObjType::FILE:
             type = "file";
@@ -168,6 +173,10 @@ std::span<const NativeTypeDef> nativeTypeDefinitions() noexcept
             ObjType::FILE,
             fileNativeProperties(),
             fileNativeMethods()},
+        NativeTypeDef{
+            ObjType::MAP,
+            mapNativeProperties(),
+            mapNativeMethods()},
         NativeTypeDef{
             ObjType::CLOSURE,
             functionNativeProperties(),

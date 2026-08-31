@@ -1,5 +1,6 @@
 #include "vm.h"
 #include "../lib/files.h"
+#include "../lib/maps.h"
 #include "../lib/math.h"
 #include "../utils/color.h"
 #include <algorithm>
@@ -212,7 +213,7 @@ public:
 
 VM::VM():
     globals(this), strings(this), grayStack(this),
-    arrayExt(this), stringExt(this), functionExt(this)
+    arrayExt(this), stringExt(this), mapExt(this), functionExt(this)
 {
     const auto natives = nativeDefinitions();
     globals.reserve(natives.size());
@@ -226,6 +227,9 @@ VM::VM():
         defineNative(nat);
 
     for(const auto& nat: fileNativeDefinitions())
+        defineNative(nat);
+
+    for(const auto& nat: mapNativeDefinitions())
         defineNative(nat);
 }
 
@@ -746,31 +750,44 @@ Result VM::run()
         {
             Value index = peek(0);
             Value receiver = peek(1);
+            Value e;
             
-            if(!is<ObjArray>(receiver))
+            if(is<ObjArray>(receiver))
             {
-                Value e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays can be indexed.", receiver);
-                pop();
-                pop();
-                push(e);
-                break;
+                auto array = as<ObjArray>(receiver);
+                auto len = array->len();
+                auto res = normalIndex(index, len);
+
+                if(res.result!=IndexResult::OK)
+                {
+                    e = makeIndexError(index, len, res.result);
+                    goto get_finally;
+                }
+
+                e = array->elements[res.index];
+            }
+            else if(is<ObjMap>(receiver))
+            {
+                auto map = as<ObjMap>(receiver);
+                try
+                {
+                    if(!map->vt.get(index, e))
+                        e = Value();
+                }
+                catch(const std::invalid_argument& error)
+                {
+                    const ErrorKind kind = validateKey(index) == HashResult::NAN_VALUE
+                        ? ErrorKind::VALUE_ERROR
+                        : ErrorKind::TYPE_ERROR;
+                    e = makeErrorResult(kind, error.what(), index);
+                }
+            }
+            else
+            {
+                e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays and maps can be indexed.", receiver);
             }
 
-            auto array = as<ObjArray>(receiver);
-            auto len = array->len();
-            auto res = normalIndex(index, len);
-
-            if(res.result!=IndexResult::OK)
-            {
-                Value e = makeIndexError(index, len, res.result);
-                pop();
-                pop();
-                push(e);
-                break;
-            }
-
-            Value e = array->elements[res.index];
-        
+            get_finally:
             pop();
             pop();
             push(e);
@@ -782,36 +799,56 @@ Result VM::run()
             Value val = peek(0);
             Value index = peek(1);
             Value receiver = peek(2);
+            Value e;
 
-            if (!is<ObjArray>(receiver))
+            if (is<ObjArray>(receiver))
             {
-                Value e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays can be indexed.", receiver);
-                pop();
-                pop();
-                pop();
-                push(e);
-                break;
+                auto array = as<ObjArray>(receiver);
+                auto res = normalIndex(index, array->len());
+
+                if(res.result!=IndexResult::OK)
+                {
+                    e = makeIndexError(index, array->len(), res.result);
+                    goto set_finally;
+                }
+                array->elements[res.index] = val;
+            }
+            else if(is<ObjMap>(receiver))
+            {
+                auto map = as<ObjMap>(receiver);
+                try
+                {
+                    map->vt.set(index, val);
+                    e = val;
+                }
+                catch(const std::invalid_argument& error)
+                {
+                    const ErrorKind kind = validateKey(index) == HashResult::NAN_VALUE
+                        ? ErrorKind::VALUE_ERROR
+                        : ErrorKind::TYPE_ERROR;
+                    e = makeErrorResult(kind, error.what(), index);
+                }
+                catch(const std::bad_alloc&)
+                {
+                    e = makeErrorResult(ErrorKind::CRITICAL_ERROR,
+                        "Not enough memory to grow map.", receiver);
+                }
+                catch(const std::length_error&)
+                {
+                    e = makeErrorResult(ErrorKind::CRITICAL_ERROR,
+                        "Map is too large to grow.", receiver);
+                }
+            }
+            else
+            {
+                e = makeErrorResult(ErrorKind::TYPE_ERROR, "Only arrays and maps can be indexed.", receiver);
             }
 
-            auto array = as<ObjArray>(receiver);
-            auto res = normalIndex(index, array->len());
-
-            if(res.result!=IndexResult::OK)
-            {
-                Value e = makeIndexError(index, array->len(), res.result);
-                pop();
-                pop();
-                pop();
-                push(e);
-                break;
-            }
-
-            array->elements[res.index] = val;
-
+            set_finally:
             pop();
             pop();
             pop();
-            push(val);
+            push(e);
             break;
         }
 
@@ -1057,6 +1094,10 @@ void VM::freeObj(Obj* object)
     case ObjType::ARRAY:
         size = sizeof(ObjArray);
         delete as<ObjArray>(object);
+        break;
+    case ObjType::MAP:
+        size = sizeof(ObjMap);
+        delete as<ObjMap>(object);
         break;
     case ObjType::FILE:
         size = sizeof(ObjFile);
@@ -1562,14 +1603,18 @@ bool VM::invokeExtensionMethod(Value receiver, ObjString* name, int argCount)
         return false;
     }
 
-    const int expected = as<ObjClosure>(implementation)->func->arity - 1;
-    if(argCount != expected)
+    const auto* function = as<ObjClosure>(implementation)->func;
+    const int expected = function->arity - 1;
+    if(!goodArity(function, argCount + 1))
     {
+        const std::string expectation = function->variadic
+            ? std::format("at least {}", expected)
+            : std::to_string(expected);
         Value error = makeErrorResult(
             ErrorKind::TYPE_ERROR,
             std::format(
                 "Method '{}()' expects {} arguments but got {}.",
-                name->str(), expected, argCount),
+                name->str(), expectation, argCount),
             receiver);
         stackTop -= argCount + 1;
         push(error);
@@ -1638,6 +1683,8 @@ Table* VM::extensionTable(ObjType type)
         return &arrayExt;
     case ObjType::STRING:
         return &stringExt;
+    case ObjType::MAP:
+        return &mapExt;
     case ObjType::CLOSURE:
     case ObjType::NATIVE:
     case ObjType::BOUND_METHOD:
@@ -1653,6 +1700,8 @@ Table* VM::extensionTable(std::string_view name)
         return &arrayExt;
     if(name == "string")
         return &stringExt;
+    if(name == "map")
+        return &mapExt;
     if(name == "function")
         return &functionExt;
     return nullptr;
@@ -1662,6 +1711,7 @@ bool VM::hasExtType(ObjType type) const
 {
     return type == ObjType::ARRAY ||
         type == ObjType::STRING ||
+        type == ObjType::MAP ||
         type == ObjType::CLOSURE ||
         type == ObjType::NATIVE ||
         type == ObjType::BOUND_METHOD;
@@ -1674,6 +1724,8 @@ bool VM::nativeMethodExistsForExtensionType(
         return findNativeMethod(ObjType::ARRAY, methodName) != nullptr;
     if(typeName == "string")
         return findNativeMethod(ObjType::STRING, methodName) != nullptr;
+    if(typeName == "map")
+        return findNativeMethod(ObjType::MAP, methodName) != nullptr;
     if(typeName == "function")
     {
         return findNativeMethod(ObjType::CLOSURE, methodName) != nullptr ||
@@ -1743,6 +1795,7 @@ void VM::markRoots()
     markTable(globals);
     markTable(arrayExt);
     markTable(stringExt);
+    markTable(mapExt);
     markTable(functionExt);
     Compiler::comp.markCompilerRoots(*this);
 }
@@ -1876,6 +1929,15 @@ void VM::blackenObject(Obj* object)
         auto arr = as<ObjArray>(object);
         for(const Value& e: arr->elements)
             markValue(e);
+        break;
+    }
+    case ObjType::MAP:
+    {
+        auto map = as<ObjMap>(object);
+        map->vt.foreach([this](const Value& key, const Value& value) {
+            markValue(key);
+            markValue(value);
+        });
         break;
     }
     case ObjType::NATIVE:

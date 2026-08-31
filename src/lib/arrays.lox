@@ -1,23 +1,10 @@
-fun reqUnary(fn, name) {
-    if (typeof(fn) != "fun") {
-        fail TYPE, name + "() expects a function.", fn;
-    }
-    if (fn.arity != 1) {
-        fail TYPE, name + "() callback must accept exactly one argument.", fn;
-    }
-}
+__module = "Array";
 
-fun reqBinary(fn, name) {
-    if (typeof(fn) != "fun") {
-        fail TYPE, name + "() expects a function.", fn;
+fun transf(array, fn) {
+    var err = reqUnary(fn, __module, "transf");
+    if(err != nil) {
+        fail TYPE, err, fn;
     }
-    if (fn.arity != 2) {
-        fail TYPE, name + "() callback must accept exactly one argument.", fn;
-    }
-}
-
-fun map(array, fn) {
-    reqUnary(fn, "map");
 
     var result = [];
     for (var i = 0; i < array.len; i = i + 1) {
@@ -28,7 +15,10 @@ fun map(array, fn) {
 }
 
 fun foreach(array, fn) {
-    reqUnary(fn, "foreach");
+    var err = reqUnary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     for (var i = 0; i < array.len; i = i + 1) {
         array[i] = fn(array[i]);
@@ -37,8 +27,26 @@ fun foreach(array, fn) {
     return array;
 }
 
+fun filter(array, fn) {
+    var err = reqUnary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+    var result = [];
+    for (var i = 0; i < array.len; i = i + 1) {
+        if(fn(array[i])) {
+            result.push(array[i]);
+        }
+    }
+    return result;
+}
+
 fun zip(fn, array1, array2) {
-    reqBinary(fn, "zip");
+    var err = reqBinary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     var n;
     if (array1.len < array2.len) {
@@ -56,18 +64,6 @@ fun zip(fn, array1, array2) {
     return result;
 }
 
-fun filter(array, fn) {
-    reqUnary(fn, "filter");
-
-    var result = [];
-    for (var i = 0; i < array.len; i = i + 1) {
-        if(fn(array[i])) {
-            result.push(array[i]);
-        }
-    }
-    return result;
-}
-
 fun fill(array, n) {
     for (var i = 0; i < array.len; i = i + 1) {
         array[i] = n;
@@ -75,7 +71,10 @@ fun fill(array, n) {
 }
 
 fun foldl(array, p, fn) {
-    reqBinary(fn, "foldl");
+    var err = reqBinary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     var acc = p;
     for (var i = 0; i < array.len; i = i + 1) {
@@ -85,7 +84,10 @@ fun foldl(array, p, fn) {
 }
 
 fun foldr(array, p, fn) {
-    reqBinary(fn, "foldr");
+    var err = reqBinary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
     
     var acc = p;
     for (var i = array.len-1; i >= 0; i = i - 1) {
@@ -95,7 +97,10 @@ fun foldr(array, p, fn) {
 }
 
 fun any(array, fn) {
-    reqUnary(fn, "any");
+    var err = reqUnary(fn, __module, "any");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     for (var i = 0; i < array.len; i = i + 1) {
         if (fn(array[i])) {
@@ -107,7 +112,10 @@ fun any(array, fn) {
 }
 
 fun all(array, fn) {
-    reqUnary(fn, "all");
+    var err = reqUnary(fn, __module, "all");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     for (var i = 0; i < array.len; i = i + 1) {
         if (!fn(array[i])) {
@@ -119,7 +127,10 @@ fun all(array, fn) {
 }
 
 fun find'(array, fn) {
-    reqUnary(fn, "find'");
+    var err = reqUnary(fn, __module, "find'");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     for (var i = 0; i < array.len; i = i + 1) {
         if (fn(array[i])) {
@@ -128,8 +139,24 @@ fun find'(array, fn) {
     }
 }
 
+fun rfind'(array, fn) {
+    var err = reqUnary(fn, __module, "rfind'");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+    for (var i = array.len-1; i >= 0; i = i - 1) {
+        if (fn(array[i])) {
+            return i;
+        } 
+    }
+}
+
 fun count'(array, fn) {
-    reqUnary(fn, "count'");
+    var err = reqUnary(fn, __module, "count'");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
 
     var count = 0;
     for (var i = 0; i < array.len; i = i + 1) {
@@ -141,7 +168,10 @@ fun count'(array, fn) {
 }
 
 fun sort'(array, cmp) {
-    reqBinary(cmp, "sort'");
+    var err = reqBinary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
     var n = array.len;
 
     for (var i = 0; i < n-1; i = i + 1) {
@@ -153,16 +183,6 @@ fun sort'(array, cmp) {
             }
         }
     }
-}
-
-fun intersperse(array, c) {
-    var result = [];
-    for (var i = 0; i < array.len-1; i = i + 1) {
-        result.push(array[i]);
-        result.push(c);
-    }
-    result.push(array.back());
-    return result;
 }
 
 fun find(array, n) {
@@ -185,7 +205,7 @@ fun rfind(array, n) {
 
 // -----
 
-extend "array" "map" map;
+extend "array" "transf" transf;
 extend "array" "foreach" foreach;
 extend "array" "filter" filter;
 extend "array" "fill" fill;
@@ -196,6 +216,5 @@ extend "array" "all" all;
 extend "array" "find'" find';
 extend "array" "count'" count';
 extend "array" "sort'" sort';
-extend "array" "intersperse" intersperse;
 extend "array" "find" find;
 extend "array" "rfind" rfind;

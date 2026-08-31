@@ -62,6 +62,7 @@ class VM
 
     Table arrayExt;
     Table stringExt;
+    Table mapExt;
     Table functionExt;
 
 public:

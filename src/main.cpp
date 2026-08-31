@@ -42,24 +42,34 @@ public:
         }
         return 0;
     }
+
+    static int load(VM& vm, const char* path)
+    {
+        std::error_code pathError;
+        const auto executable = std::filesystem::absolute(path, pathError);
+        if(pathError)
+        {
+            std::cerr << "[library error] Could not resolve the interpreter path.\n";
+            return 74;  
+        }
+
+        const std::string libPaths[] = {"functions.lox", "arrays.lox", "maps.lox"};
+        int libResult = 0;
+        for (const auto& path: libPaths)
+        {
+            const auto lib = executable.parent_path() / "src" / "lib" / path;
+            libResult += Runtime::process(vm, lib.string());
+        }
+        return libResult;
+    }
 };
 
 int main(int argc, char* argv[])
 {
     VM vm;
 
-    std::error_code pathError;
-    const auto executable = std::filesystem::absolute(argv[0], pathError);
-    if(pathError)
-    {
-        std::cerr << "[library error] Could not resolve the interpreter path.\n";
-        return 74;  
-    }
-
-    const auto arrayLib = executable.parent_path() / "src" / "lib" / "arrays.lox";
-    const auto funcLib = executable.parent_path() / "src" / "lib" / "functions.lox";
-    const int libraryResult = Runtime::process(vm, arrayLib.string()) + Runtime::process(vm, funcLib.string());
-    if(libraryResult != 0)
+    int libResult = Runtime::load(vm, argv[0]);
+    if(libResult != 0)
     {
         std::cerr << "[library error] Could not initialize the standard library.\n";
         return 78;

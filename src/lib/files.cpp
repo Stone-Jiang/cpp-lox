@@ -216,8 +216,7 @@ NativeResult fileReadlines(VM& vm, Value receiver, int, Value*)
 NativeResult fileWrite(VM&, Value receiver, int, Value* args)
 {
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR,
-            "write() expects a string.", args[0]);
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "write() expects a string.", args[0]);
     return fileAction(receiver, [&](utils::File& file) {
         return NativeResult::success(Value(static_cast<double>(
             file.write(as<ObjString>(args[0])->str()))));
@@ -227,8 +226,7 @@ NativeResult fileWrite(VM&, Value receiver, int, Value* args)
 NativeResult fileWritelines(VM&, Value receiver, int, Value* args)
 {
     if(!is<ObjArray>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR,
-            "writelines() expects an array of strings.", args[0]);
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "writelines() expects an array of strings.", args[0]);
 
     std::vector<std::string> lines;
     try
@@ -238,8 +236,7 @@ NativeResult fileWritelines(VM&, Value receiver, int, Value* args)
         for(const Value& value: array->elements)
         {
             if(!is<ObjString>(value))
-                return NativeResult::failure(ErrorKind::TYPE_ERROR,
-                    "writelines() expects every array element to be a string.", value);
+                return NativeResult::failure(ErrorKind::TYPE_ERROR, "writelines() expects every array element to be a string.", value);
             lines.push_back(as<ObjString>(value)->str());
         }
     }

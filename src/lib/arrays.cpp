@@ -1,4 +1,5 @@
 #include "arrays.h"
+#include "copies.h"
 
 #include "../lang/object.h"
 #include "../lang/vm.h"
@@ -88,6 +89,11 @@ NativeResult arrayCopy(VM& vm, Value receiver, int, Value*)
     vm.pop();
 
     return NativeResult::success(Value(copy));
+}
+
+NativeResult arrayDeepCopy(VM& vm, Value receiver, int, Value*)
+{
+    return deepCopyCollection(vm, receiver);
 }
 
 NativeResult arrayPop(VM&, Value receiver, int, Value*)
@@ -306,6 +312,7 @@ constexpr std::array methods {
     NativeMethodDef{"insert", 2, arrayInsert},
     NativeMethodDef{"clear", 0, arrayClear},
     NativeMethodDef{"copy", 0, arrayCopy},
+    NativeMethodDef{"deep_copy", 0, arrayDeepCopy},
     NativeMethodDef{"reverse", 0, arrayReverse},
     NativeMethodDef{"concat", 1, arrayConcat},
     NativeMethodDef{"erase", 1, arrayErase},

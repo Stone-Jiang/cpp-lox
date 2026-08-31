@@ -1,0 +1,66 @@
+__module = "Map";
+
+fun remove_all(m, keys...) {
+    for(var i=0; i<keys.len; i = i+1) {
+        m.remove(keys[i]);
+    }
+}
+
+fun map_foreach(m, fn) {
+    var err = reqBinary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+    
+}
+
+fun map_filter(m, fn) {
+    var err = reqBinary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+}
+
+fun transf_keys(m, fn) {
+    var err = reqUnary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+}
+
+fun transf_values(m, fn) {
+    var err = reqUnary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+}
+
+fun map_any(m, fn) {
+    var err = reqBinary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+}
+
+fun map_all(m, fn) {
+    var err = reqBinary(fn, __module, "foreach");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+    
+}
+
+// -----
+
+extend "map" "remove_all" remove_all;
+extend "map" "foreach" map_foreach;
+extend "map" "filter" map_filter;
+extend "map" "transf_keys" transf_keys;
+extend "map" "transf_values" transf_values;
+extend "map" "map_any" map_any;
+extend "map" "map_all" map_all;

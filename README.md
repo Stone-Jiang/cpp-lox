@@ -6,6 +6,7 @@ The implementation uses C++ types and lifetime management while keeping the runt
 
 ## Requirements and Building
 
+[!IMPORTANT]
 - A C++ **20** compiler available as `g++`, `clang++`, or `MSVC`.
 - Probably a 64-bit machine (not tested on 32-bit machines)
 - Python 3 (for custom build & playground.) **Not required for if you don't need these two features.**
@@ -37,7 +38,7 @@ The release executable is named `main`, and the debug executable is named `debug
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
 - Replaced messages and string handling with `std::string` and `std::string_view`, which provides simpler and more readable memory management with low cost.
 - Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
-- Added colors in debug mode. **Please use `-q` to quit! Using `ctrl c` might make your terminal cyan!**.
+- Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal cyan, though not harmful.
 
 ### Configurable value and table implementations
 
@@ -202,22 +203,27 @@ print a.len; // 2
 
 Arrays provide these native methods:
 
-- `push(value)` appends a value and returns `nil`.
-- `pop()` removes and returns the final element; popping an empty array produces an `INDEX` error.
-- `insert(index, value)` inserts before the selected position and returns `nil`. Position `len` appends, and negative positions count backward from the end.
-- `clear()` removes every element and returns `nil`.
-- `copy()` returns a shallow copy with independent outer storage.
-- `reverse()` reverses the array in place and returns `nil`.
-- `concat(other)` appends the elements of another array in place and returns `nil`.
-- `erase(index)` removes the element at an integral index and returns `nil`.
-- `remove(value)` removes the first equal value and reports whether one was found.
-- `front()` and `back()` return the first and last values; an empty array produces an `INDEX` error.
-- `count(value)` returns the number of equal elements.
-- `find(value)` returns the first matching index, or `-1` when no value matches.
-- `slice(lo, hi)` returns a shallow half-open slice `[lo, hi)`. The upper bound may equal `len`.
-- `join(separator)` converts the elements to strings and joins them with a string separator.
-- `sort()` sorts the array in place using the runtime's ordinary value ordering and returns `nil`.
-- `==` compares whether two arrays are the *same* array. If you want to compare element-wise at $O(n)$ , use `~=`.
+| Interface | Return value | Mutates receiver? | Behavior |
+|---|---|---:|---|
+| `a.push(value)` | `nil` | Yes | Appends `value` |
+| `a.pop()` | Removed final element | Yes | Produces an `INDEX` error when empty |
+| `a.insert(index, value)` | `nil` | Yes | Inserts before `index`; position `len` appends, and negative positions count backward from the end |
+| `a.clear()` | `nil` | Yes | Removes every element |
+| `a.copy()` | New shallow array | No | Copies the outer storage; nested objects remain shared |
+| `a.deep_copy()` | New recursively copied array | No | Recursively copies nested arrays and maps while preserving aliases and cycles in the copied graph |
+| `a.reverse()` | `nil` | Yes | Reverses the elements in place |
+| `a.concat(other)` | `nil` | Yes | Appends the elements of `other` |
+| `a.erase(index)` | `nil` | Yes | Removes the element at an integral index |
+| `a.remove(value)` | Boolean | When found | Removes the first equal value and reports whether one was found |
+| `a.front()` | First element | No | Produces an `INDEX` error when empty |
+| `a.back()` | Last element | No | Produces an `INDEX` error when empty |
+| `a.count(value)` | Number of equal elements | No | Counts elements equal to `value` |
+| `a.find(value)` | First matching index, or `-1` | No | Searches from the beginning |
+| `a.slice(lo, hi)` | New shallow array | No | Copies the half-open range `[lo, hi)`; `hi` may equal `len` |
+| `a.join(separator)` | New string | No | Converts elements to strings and joins them with `separator` |
+| `a.sort()` | `nil` | Yes | Sorts in place using the runtime's ordinary value ordering |
+| `a == other` | Boolean | No | Returns whether `a` and `other` *are the same* arrays; 
+| `a ~= other` | Boolean | No | Returns whether `a` and `other` element-wise equal arrays $O(n)$; 
 
 ```
 var a = [1, 3];
@@ -274,52 +280,215 @@ print values;                      // [10, 20, 30]
 
 The script library currently provides:
 
-- `map(array, fn)` / `array.map(fn)`: return a new array containing `fn(element)`.
-- `foreach(array, fn)` / `array.foreach(fn)`: replace every element with `fn(element)` and return the original array.
-- `filter(array, predicate)` / `array.filter(predicate)`: return a new array containing matching elements.
-- `fill(array, value)` / `array.fill(value)`: replace every element in place.
-- `foldl(array, initial, fn)` / `array.foldl(initial, fn)`: fold from left to right.
-- `foldr(array, initial, fn)` / `array.foldr(initial, fn)`: fold from right to left.
-- `any(array, predicate)` / `array.any(predicate)` and `all(array, predicate)` / `array.all(predicate)`: test elements with short-circuiting.
-- `find'(array, predicate)` / `array.find'(predicate)`: return the first matching index, or `nil`.
-- `count'(array, predicate)` / `array.count'(predicate)`: count matching elements.
-- `sort'(array, comparator)` / `array.sort'(comparator)`: sort in place using a two-argument comparator.
-- `intersperse(array, value)` / `array.intersperse(value)`: return a new array with a value placed between adjacent elements.
-- `zip(fn, array1, array2)`: combine corresponding elements into a new array, stopping at the shorter input. This function is global-only.
+| Preferred method | Global form | Return value | Mutates receiver? | Behavior |
+|---|---|---|---:|---|
+| `array.map(fn)` | `map(array, fn)` | New array | No | Applies `fn(element)` to every element |
+| `array.foreach(fn)` | `foreach(array, fn)` | Original array | Yes | Replaces every element with `fn(element)` |
+| `array.filter(predicate)` | `filter(array, predicate)` | New array | No | Keeps elements accepted by `predicate` |
+| `array.fill(value)` | `fill(array, value)` | Original array | Yes | Replaces every element with `value` |
+| `array.foldl(initial, fn)` | `foldl(array, initial, fn)` | Accumulated value | No | Folds from left to right |
+| `array.foldr(initial, fn)` | `foldr(array, initial, fn)` | Accumulated value | No | Folds from right to left |
+| `array.any(predicate)` | `any(array, predicate)` | Boolean | No | Tests elements with short-circuiting until one matches |
+| `array.all(predicate)` | `all(array, predicate)` | Boolean | No | Tests elements with short-circuiting until one fails |
+| `array.find'(predicate)` | `find'(array, predicate)` | First matching index, or `nil` | No | Finds the first element accepted by `predicate` |
+| `array.count'(predicate)` | `count'(array, predicate)` | Number of matching elements | No | Counts elements accepted by `predicate` |
+| `array.sort'(comparator)` | `sort'(array, comparator)` | Original array | Yes | Sorts in place using a two-argument comparator |
+| `array.intersperse(value)` | `intersperse(array, value)` | New array | No | Places `value` between adjacent elements |
+| — | `zip(fn, array1, array2)` | New array | No | Combines corresponding elements, stopping at the shorter input; global-only |
 
 The read-only `arity` attribute reports a function's fixed parameter count. The standard-library methods use it to validate callbacks even when an array is empty.
 
-### Script extension methods
+### Lambdas / Anonymous functions
 
-Script functions can be registered as extension methods at top level. The registered implementation receives the method receiver as its first argument:
+A lambda is defined in Haskell-fashion as `var a = \x => x + 1;`. They follow the same rules as functions in terms of being first-class, capable of assignment, capturing closures etc., but they can be anonymous. They can also be used on-spot.
+
+These are correct ways of defining and using lambdas:
 
 ```
-fun twice(fn, value) {
-    return fn(fn(value));
+// Zero parameters.
+var one = \() => 1;
+print one(); // expect: 1
+print one; // expect: <fn (lambda)>
+
+// Bare and parenthesized single parameters.
+print (\x => x + 1)(2);   // expect: 3
+print (\(x) => x + 1)(2); // expect: 3
+
+// Multiple parameters.
+print (\(x, y) => x + y)(2, 3); // expect: 5
+
+// Capture.
+fun makeAdder(n) {
+  return \x => x + n;
+}
+print makeAdder(5)(10); // expect: 15
+
+// Nested capture.
+var make = \x => \y => x + y;
+print make(2)(3); // expect: 5
+
+// Mutation of captured state.
+fun counter() {
+  var n = 0;
+  return \() => n = n + 1;
 }
 
-extend "function" "twice" twice;
-print (\x => x + 1).twice(40); // 42
+var next = counter();
+print next(); // expect: 1
+print next(); // expect: 2
+
+// First-class storage.
+var functions = [\x => x + 1];
+print functions[0](9); // expect: 10
 ```
 
-Array, string, and function extension namespaces are available. Existing native methods cannot be replaced.
+### Maps
 
-The grammar is:
-
-```
-extend-statement -> "extend" STRING STRING expression ";"
-```
-
-The first string must currently be `"array"`, `"string"`, or `"function"`; the second string is the method name, and the final expression must evaluate to a script closure. Registration captures that closure in a garbage-collector root. The closure must declare at least one fixed parameter for the receiver. Duplicate registrations and attempts to replace native methods are runtime errors.
-
-Method dispatch checks native methods first and script extensions second. A direct call rearranges the receiver into the first ordinary argument:
+`Map()` constructs an empty, mutable hash map. Map variables have reference semantics: assignment aliases the same map, while `copy()` and `deep_copy()` create new map objects. Capacity, load factor, buckets, and the selected C++ hash-table implementation remain internal.
 
 ```
-value.method(a, b)
-// equivalent to the registered implementation(value, a, b)
+var scores = Map();
+scores["Ada"] = 10;
+scores["Grace"] = 20;
+
+var alias = scores;
+alias["Ada"] = 15;
+print scores["Ada"]; // 15
+print scores.len;    // 2
 ```
 
-Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
+Index assignment inserts a missing key or overwrites an existing key. The assignment expression evaluates to the assigned value. Index lookup returns the stored value, or harmless `nil` when the key is absent:
+
+```
+var m = Map();
+
+print m["missing"]; // nil; no insertion
+print m.len;        // 0
+
+print m["x"] = 1; // 1; inserts "x"
+print m["x"] = 2; // 2; overwrites "x"
+print m.len;       // 1
+```
+
+`len` is a read-only numeric property. The native interfaces have the following return and update behavior:
+
+| Interface | Return value | Mutates receiver? | Insertion or overwrite behavior |
+|---|---|---:|---|
+| `m[key]` | Stored value, or `nil` | No | Never inserts |
+| `m[key] = value` | `value` | Yes | Inserts a missing key; overwrites an existing key |
+| `m.has_key(key)` | Boolean | No | Never inserts |
+| `m.get_or(key, fallback)` | Stored value, or `fallback` | No | Never inserts |
+| `m.get_or_set(key, fallback)` | Stored value, or `fallback` | Only when missing | Inserts `fallback` only when the key is absent; never overwrites |
+| `m.remove(key)` | Removed value, or `nil` | Only when found | Never inserts |
+| `m.remove_or(key, fallback)` | Removed value, or `fallback` | Only when found | Never inserts |
+| `m.clear()` | `nil` | Yes | Removes every entry |
+| `m.keys()` | New array of keys | No | Never inserts |
+| `m.values()` | New array of values | No | Never inserts |
+| `m.items()` | New array containing `[key, value]` arrays | No | Never inserts |
+| `m.copy()` | New shallow map | No | Copies all entries into independent outer storage |
+| `m.deep_copy()` | New recursively copied map | No | Recursively copies array/map keys and values |
+| `m.update(other)` | `nil` | Yes | Inserts missing keys and overwrites collisions with values from `other` |
+| `m.merge(other)` | New shallow map | No | Starts with the receiver, then lets `other` overwrite collisions |
+| `m.invert()` | New map | No | Uses values as keys; duplicate values overwrite earlier entries |
+
+Hash-map traversal order is unspecified. Consequently, the order returned by `keys()`, `values()`, and `items()` is unspecified, and when `invert()` encounters duplicate values, which original key survives is also unspecified.
+
+```
+var defaults = Map();
+defaults["color"] = "blue";
+
+print defaults.get_or("size", 10);      // 10; unchanged
+print defaults.get_or_set("size", 10); // 10; inserts
+print defaults.get_or_set("size", 20); // 10; does not overwrite
+print defaults.remove_or("size", -1);  // 10; removes
+print defaults.remove_or("size", -1);  // -1
+```
+
+`copy()` is shallow: nested objects remain shared. `deep_copy()` recursively duplicates arrays and maps, including map keys, while preserving repeated references and cycles inside the new object graph. Strings, functions, files, instances, and other non-collection objects remain shared.
+
+```
+var inner = [1];
+var source = Map();
+source["items"] = inner;
+
+var shallow = source.copy();
+var deep = source.deep_copy();
+inner.push(2);
+
+print shallow["items"]; // [1, 2]
+print deep["items"];    // [1]
+```
+
+#### Hash-key responsibility
+
+[!WARNING]
+Release builds provide a hash for every runtime value and do not reject object keys. Using mutable or otherwise unstable objects as keys is at the user's risk: changing state that participates in equality or hashing can make an entry surprising or unreachable. NaN is similarly unsafe because it is not equal to itself. Builds with `DEBUG_VALUE_TABLE` diagnose keys that are not considered stable.
+
+`invert()` promotes every value to a key, so inversion carries the same responsibility. Inverting a map whose values are mutable, unstable, NaN, or duplicated can reject the operation in a debug build or produce overwrite/lookup behavior that depends on those values in a release build.
+
+Maps strongly retain both keys and values for garbage collection. Map equality uses identity: two separately constructed maps are not equal merely because they contain equal entries.
+
+#### Planned higher-order map operations
+
+Higher-order map functions are not implemented yet. Their intended purposes and names are reserved clearly enough to guide the future API. Method form will be recommended; optional global forms will use the `map_` prefix to avoid collisions with array functions and `Map()`:
+
+| Preferred method | Optional global form | Intended purpose |
+|---|---|---|
+| `m.foreach(fn)` | `map_foreach(m, fn)` | Visit each `(key, value)` pair for side effects |
+| `m.filter(fn)` | `map_filter(m, fn)` | Return a new map containing pairs accepted by the predicate |
+| `m.transform_values(fn)` | `map_transform_values(m, fn)` | Return a new map with transformed values and unchanged keys |
+| `m.transform_keys(fn)` | `map_transform_keys(m, fn)` | Return a new map with transformed keys; collisions overwrite according to traversal order |
+| `m.fold(initial, fn)` | `map_fold(m, initial, fn)` | Reduce all pairs to one accumulated value |
+| `m.any(fn)` | `map_any(m, fn)` | Test whether any pair satisfies a predicate |
+| `m.all(fn)` | `map_all(m, fn)` | Test whether every pair satisfies a predicate |
+
+These names currently describe planned behavior only; calling them is not supported yet.
+
+### Variadic functions
+
+A final named parameter followed by `...` collects all remaining arguments into a fresh array. The rest array is created for every call, including calls with no extra arguments:
+
+```
+fun collect(first, rest...) {
+  print first;
+  return rest;
+}
+
+print collect(1);                // []
+print collect(1, 2, "three");   // [2, three]
+
+var tail = \(first, rest...) => rest;
+print tail(10, 20, 30);          // [20, 30]
+```
+
+The parameter grammar is:
+
+```
+parameter-list -> IDENTIFIER ("," IDENTIFIER)* ["..."]
+```
+
+In practice, `...` must immediately follow the final parameter name. A rest parameter may be the only parameter, but it cannot be followed by another parameter:
+
+```
+fun collectAll(values...) {}       // valid
+fun collect(first, rest...) {}     // valid
+fun invalid(first..., later) {}    // compile error
+```
+
+The function's fixed arity excludes its rest parameter. Calling a variadic function requires at least that many fixed arguments; surplus arguments are packed into the rest array. The array is mutable, traces its elements for garbage collection, and can safely be captured by a closure.
+
+Ellipsis is currently declaration syntax only. Calls do not yet support array spreading, so `fn(values...)` is not valid call syntax.
+
+These are rejected by the compiler.
+
+```
+var bad = \ => 1;
+var bad = \(a, a) => a;
+var bad = \(a b) => a + b;
+var bad = \(a,) => a;
+var bad = \x, y => x + y;
+var bad = \x x + 1;
+```
 
 ### File I/O
 
@@ -379,95 +548,37 @@ Methods are:
 
 The binding validates Lox values and delegates I/O and stream-state handling to the corresponding native `File` object. Assignment aliases the same file object; it does not duplicate an operating-system stream. A reachable file object keeps its stream alive, while an unreachable one is closed by RAII during garbage collection. Explicit `close()` remains recommended because garbage collection timing is intentionally unspecified.
 
-### Lambdas / Anonymous functions
+### Script extension methods
 
-A lambda is defined in Haskell-fashion as `var a = \x => x + 1;`. They follow the same rules as functions in terms of being first-class, capable of assignment, capturing closures etc., but they can be anonymous. They can also be used on-spot.
-
-These are correct ways of defining and using lambdas:
+Script functions can be registered as extension methods at top level. The registered implementation receives the method receiver as its first argument:
 
 ```
-// Zero parameters.
-var one = \() => 1;
-print one(); // expect: 1
-print one; // expect: <fn (lambda)>
-
-// Bare and parenthesized single parameters.
-print (\x => x + 1)(2);   // expect: 3
-print (\(x) => x + 1)(2); // expect: 3
-
-// Multiple parameters.
-print (\(x, y) => x + y)(2, 3); // expect: 5
-
-// Capture.
-fun makeAdder(n) {
-  return \x => x + n;
-}
-print makeAdder(5)(10); // expect: 15
-
-// Nested capture.
-var make = \x => \y => x + y;
-print make(2)(3); // expect: 5
-
-// Mutation of captured state.
-fun counter() {
-  var n = 0;
-  return \() => n = n + 1;
+fun twice(fn, value) {
+  return fn(fn(value));
 }
 
-var next = counter();
-print next(); // expect: 1
-print next(); // expect: 2
-
-// First-class storage.
-var functions = [\x => x + 1];
-print functions[0](9); // expect: 10
+extend "function" "twice" twice;
+print (\x => x + 1).twice(40); // 42
 ```
 
-### Variadic functions
+Array, string, and function extension namespaces are available. Existing native methods cannot be replaced.
 
-A final named parameter followed by `...` collects all remaining arguments into a fresh array. The rest array is created for every call, including calls with no extra arguments:
-
-```
-fun collect(first, rest...) {
-  print first;
-  return rest;
-}
-
-print collect(1);                // []
-print collect(1, 2, "three");   // [2, three]
-
-var tail = \(first, rest...) => rest;
-print tail(10, 20, 30);          // [20, 30]
-```
-
-The parameter grammar is:
+The grammar is:
 
 ```
-parameter-list -> IDENTIFIER ("," IDENTIFIER)* ["..."]
+extend-statement -> "extend" STRING STRING expression ";"
 ```
 
-In practice, `...` must immediately follow the final parameter name. A rest parameter may be the only parameter, but it cannot be followed by another parameter:
+The first string must currently be `"array"`, `"string"`, or `"function"`; the second string is the method name, and the final expression must evaluate to a script closure. Registration captures that closure in a garbage-collector root. The closure must declare at least one fixed parameter for the receiver. Duplicate registrations and attempts to replace native methods are runtime errors.
+
+Method dispatch checks native methods first and script extensions second. A direct call rearranges the receiver into the first ordinary argument:
 
 ```
-fun collectAll(values...) {}       // valid
-fun collect(first, rest...) {}     // valid
-fun invalid(first..., later) {}    // compile error
+value.method(a, b)
+// equivalent to the registered implementation(value, a, b)
 ```
 
-The function's fixed arity excludes its rest parameter. Calling a variadic function requires at least that many fixed arguments; surplus arguments are packed into the rest array. The array is mutable, traces its elements for garbage collection, and can safely be captured by a closure.
-
-Ellipsis is currently declaration syntax only. Calls do not yet support array spreading, so `fn(values...)` is not valid call syntax.
-
-These are rejected by the compiler.
-
-```
-var bad = \ => 1;
-var bad = \(a, a) => a;
-var bad = \(a b) => a + b;
-var bad = \(a,) => a;
-var bad = \x, y => x + y;
-var bad = \x x + 1;
-```
+Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
 
 ## Playground
 

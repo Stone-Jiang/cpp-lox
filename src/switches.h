@@ -5,6 +5,7 @@
 // #define DEBUG_PRINT_CODE
 // #define DEBUG_STRESS_GC
 // #define DEBUG_LOG_GC
+// #define DEBUG_VALUE_TABLE
 
 #define BETTER_HASH_TABLE
 #define NAN_BOXING

@@ -61,7 +61,7 @@ DEBUG_FLAGS = ["-O0", "-g", "-g3", "-fno-omit-frame-pointer"]
 # ---------------------------------------------------------------------------
 RELEASE_MACROS = []
 
-DEBUG_MACROS = ["DEBUG_TRACE_EXECUTION", "DEBUG_PRINT_CODE", "DEBUG_LOG_GC"]
+DEBUG_MACROS = ["DEBUG_TRACE_EXECUTION", "DEBUG_PRINT_CODE", "DEBUG_LOG_GC", "DEBUG_VALUE_TABLE"]
 
 # ---------------------------------------------------------------------------
 # Output binary names - edit here to rename the final executables.
