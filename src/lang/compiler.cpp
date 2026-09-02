@@ -279,6 +279,10 @@ void Compiler::statement()
     {
         whileStmt();
     }
+    else if(match(TokenType::RANGE))
+    {
+        rangeStmt();
+    }
     else if(match(TokenType::LEFT_BRACE)) 
     {
         beginScope();
@@ -1141,6 +1145,7 @@ void Compiler::synchronize()
         case TokenType::FUN:
         case TokenType::VAR:
         case TokenType::FOR:
+        case TokenType::RANGE:
         case TokenType::IF:
         case TokenType::WHILE:
         case TokenType::PRINT:
@@ -1279,6 +1284,107 @@ void Compiler::extendStmt()
     expression();
     consume(TokenType::SEMICOLON, "Expect ';' after extension declaration.");
     emit(OpCode::EXTEND);
+}
+
+void Compiler::rangeStmt()
+{
+    beginScope();
+    consume(TokenType::LEFT_PAREN, "Expect '(' after 'range'.");
+    consume(TokenType::IDENTIFIER, "Expect variable for 'range'.");
+    Token first = parser.prev;
+    std::optional<Token> second;
+
+    if(match(TokenType::COMMA))
+    {
+        consume(TokenType::IDENTIFIER, "Expect second range variable after ','.");
+        second = parser.prev;
+        if(identifiersEqual(first, *second))
+            errorAt(parser.prev, "Range variables must be different.");
+    }
+
+    consume(TokenType::COLON, "Expect ':' after range variables.");
+    expression();
+    consume(TokenType::RIGHT_PAREN, "Expect ')' after range expression.");
+
+    const u8 width = second.has_value() ? 2 : 1;
+    emit(OpCode::ITER_SNAP, width);
+
+    // The snapshot produced by ITER_SNAP is already on the stack. Binding it
+    // as a local keeps it rooted for the lifetime of the loop.
+    addLocal(syntheticToken("@range_snapshot"));
+    markInitialized();
+    const int snapshotSlot = current->localCount - 1;
+
+    emitConstant(Value(0.0));
+    addLocal(syntheticToken("@range_cursor"));
+    markInitialized();
+    const int cursorSlot = current->localCount - 1;
+
+    emit(OpCode::NIL);
+    addLocal(first);
+    markInitialized();
+    const int firstSlot = current->localCount - 1;
+
+    int secondSlot = -1;
+    if(second.has_value())
+    {
+        emit(OpCode::NIL);
+        addLocal(*second);
+        markInitialized();
+        secondSlot = current->localCount - 1;
+    }
+
+    const int conditionStart = currentChunk()->size();
+
+    emit(OpCode::GET_LOCAL, static_cast<u8>(cursorSlot));
+    emit(OpCode::GET_LOCAL, static_cast<u8>(snapshotSlot));
+    Token length = syntheticToken("len");
+    emit(OpCode::GET_PROPERTY, identConstant(length));
+    emit(OpCode::LESS);
+
+    const int exitJump = emitJump(OpCode::JUMP_IF_FALSE);
+    emit(OpCode::POP);
+
+    // first = snapshot[cursor]
+    emit(OpCode::GET_LOCAL, static_cast<u8>(snapshotSlot));
+    emit(OpCode::GET_LOCAL, static_cast<u8>(cursorSlot));
+    emit(OpCode::GET_INDEX);
+    emit(OpCode::SET_LOCAL, static_cast<u8>(firstSlot));
+    emit(OpCode::POP);
+
+    if(second.has_value())
+    {
+        // second = snapshot[cursor + 1]
+        emit(OpCode::GET_LOCAL, static_cast<u8>(snapshotSlot));
+        emit(OpCode::GET_LOCAL, static_cast<u8>(cursorSlot));
+        emitConstant(Value(1.0));
+        emit(OpCode::ADD);
+        emit(OpCode::GET_INDEX);
+        emit(OpCode::SET_LOCAL, static_cast<u8>(secondSlot));
+        emit(OpCode::POP);
+    }
+
+    // Advance before the body so continue can jump to the condition directly.
+    emit(OpCode::GET_LOCAL, static_cast<u8>(cursorSlot));
+    emitConstant(Value(static_cast<double>(width)));
+    emit(OpCode::ADD);
+    emit(OpCode::SET_LOCAL, static_cast<u8>(cursorSlot));
+    emit(OpCode::POP);
+
+    LoopCompiler loop(owner);
+    loop.enclosing = current->currentLoop;
+    loop.scopeDepth = current->scopeDepth;
+    loop.continueTarget = conditionStart;
+    current->currentLoop = &loop;
+
+    statement();
+    emitLoop(conditionStart);
+
+    patchJump(exitJump);
+    emit(OpCode::POP);
+    patchBreaks(loop);
+    current->currentLoop = loop.enclosing;
+    endScope();
 }
 
 // -----

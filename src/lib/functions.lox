@@ -4,27 +4,34 @@ __module = "Function";
 
 fun reqUnary(fn, where, name) {
     var err;
-
     if (typeof(fn) != "fun") {
         err = where + ": " + name + "() expects a function.";
     }
     if (fn.arity != 1) {
         err = where + ": " + name + "() callback must accept exactly one argument.";
     }
-
     return err;
 }
 
 fun reqBinary(fn, where, name) {
     var err;
-
     if (typeof(fn) != "fun") {
         err = where + ": " + name + "() expects a function.";
     }
     if (fn.arity != 2) {
         err = where + ": " + name + "() callback must accept exactly two arguments.";
     }
+    return err;
+}
 
+fun reqTernary(fn, where, name) {
+    var err;
+    if (typeof(fn) != "fun") {
+        err = where + ": " + name + "() expects a function.";
+    }
+    if (fn.arity != 3) {
+        err = where + ": " + name + "() callback must accept exactly three arguments.";
+    }
     return err;
 }
 

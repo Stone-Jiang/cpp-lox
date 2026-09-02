@@ -746,6 +746,84 @@ Result VM::run()
             break;
         }
 
+        case OpCode::ITER_SNAP:
+        {
+            const u8 width = read_byte(frame);
+            Value iterable = peek(0);
+
+            if(width != 1 && width != 2)
+            {
+                runtimeError("Invalid range width {}.", width);
+                return Result::RUNTIME_ERROR;
+            }
+
+            if(!is<ObjArray>(iterable) && !is<ObjMap>(iterable))
+            {
+                runtimeError("Range expects an array or map.");
+                return Result::RUNTIME_ERROR;
+            }
+
+            try
+            {
+                auto* snapshot = makeObj<ObjArray>(*this);
+                // Keep both the source and the in-progress snapshot rooted.
+                push(Value(snapshot));
+
+                if(is<ObjArray>(iterable))
+                {
+                    const auto* array = as<ObjArray>(iterable);
+                    if(array->len() >
+                        std::numeric_limits<size_t>::max() / width)
+                    {
+                        throw std::length_error("Range snapshot is too large.");
+                    }
+
+                    snapshot->elements.reserve(array->len() * width);
+                    for(size_t i = 0; i < array->len(); ++i)
+                    {
+                        if(width == 2)
+                        {
+                            snapshot->elements.push_back(
+                                Value(static_cast<double>(i)));
+                        }
+                        snapshot->elements.push_back(array->elements[i]);
+                    }
+                }
+                else
+                {
+                    const auto* map = as<ObjMap>(iterable);
+                    if(map->len() >
+                        std::numeric_limits<size_t>::max() / width)
+                    {
+                        throw std::length_error("Range snapshot is too large.");
+                    }
+
+                    snapshot->elements.reserve(map->len() * width);
+                    map->vt.foreach(
+                        [snapshot, width](const Value& key, const Value& value) {
+                            snapshot->elements.push_back(key);
+                            if(width == 2)
+                                snapshot->elements.push_back(value);
+                        });
+                }
+
+                Value completed = pop();
+                pop();
+                push(completed);
+            }
+            catch(const std::bad_alloc&)
+            {
+                runtimeError("Not enough memory to create range snapshot.");
+                return Result::RUNTIME_ERROR;
+            }
+            catch(const std::length_error&)
+            {
+                runtimeError("Collection is too large to iterate.");
+                return Result::RUNTIME_ERROR;
+            }
+            break;
+        }
+
         case OpCode::GET_INDEX:
         {
             Value index = peek(0);

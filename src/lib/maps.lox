@@ -6,29 +6,19 @@ fun remove_all(m, keys...) {
     }
 }
 
-fun map_foreach(m, fn) {
-    var err = reqBinary(fn, __module, "foreach");
-    if(err != nil) {
-        fail TYPE, err, fn;
-    }
-
-    
-}
-
 fun map_filter(m, fn) {
-    var err = reqBinary(fn, __module, "foreach");
+    var err = reqBinary(fn, __module, "filter");
     if(err != nil) {
         fail TYPE, err, fn;
     }
 
-}
-
-fun transf_keys(m, fn) {
-    var err = reqUnary(fn, __module, "foreach");
-    if(err != nil) {
-        fail TYPE, err, fn;
+    var result = Map();
+    range(k, v: m) {
+        if(fn(k, v)) {
+            result[k] = v;
+        }
     }
-
+    return result;
 }
 
 fun transf_values(m, fn) {
@@ -37,6 +27,9 @@ fun transf_values(m, fn) {
         fail TYPE, err, fn;
     }
 
+    range(k, v: m) {
+        m[k] = fn(v);
+    }
 }
 
 fun map_any(m, fn) {
@@ -45,6 +38,11 @@ fun map_any(m, fn) {
         fail TYPE, err, fn;
     }
 
+    range(k, v: m) {
+        if(fn(k, v)) {
+            return true;
+        }
+    }
 }
 
 fun map_all(m, fn) {
@@ -53,14 +51,46 @@ fun map_all(m, fn) {
         fail TYPE, err, fn;
     }
     
+    range(k, v: m) {
+        if(!fn(k, v)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fun map_foldl(array, p, fn) {
+    var err = reqTernary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+
+    var acc = p;
+    range(k, v: m) {
+        acc = fn(acc, k, v);
+    }
+    return acc;
+}
+
+fun map_foldr(array, p, fn) {
+    var err = reqTernary(fn, __module, "zip");
+    if(err != nil) {
+        fail TYPE, err, fn;
+    }
+    
+    var acc = p;
+    range(k, v: m) {
+        acc = fn(k, v, acc);
+    }
+    return acc;
 }
 
 // -----
 
 extend "map" "remove_all" remove_all;
-extend "map" "foreach" map_foreach;
 extend "map" "filter" map_filter;
-extend "map" "transf_keys" transf_keys;
 extend "map" "transf_values" transf_values;
-extend "map" "map_any" map_any;
-extend "map" "map_all" map_all;
+extend "map" "any" map_any;
+extend "map" "all" map_all;
+extend "map" "foldl" map_foldl;
+extend "map" "foldr" map_foldr;

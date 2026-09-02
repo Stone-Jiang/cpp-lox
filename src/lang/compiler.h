@@ -3,6 +3,7 @@
 #include "scanner.h"
 #include "object.h"
 #include "debug.h"
+#include <optional>
 
 class Compiler;
 class VM;
@@ -234,6 +235,7 @@ private:
     void emitClosure(const Compiler& compiler, ObjFunction* func);
 
     void extendStmt();
+    void rangeStmt();
 };
 
 

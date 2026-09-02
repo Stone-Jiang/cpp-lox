@@ -67,6 +67,20 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 
 `break` and `continue` are supported in `while` and `for` loops, including nested loops. The compiler rejects either keyword outside a loop and prevents loop control from crossing a function boundary.
 
+Collection iteration uses a separate `range` statement. Parentheses are required, and the collection expression is evaluated once:
+
+```lox
+range (value : array) { print value; }
+range (index, value : array) { print index; print value; }
+
+range (key : map) { print key; }
+range (key, value : map) { print key; print value; }
+```
+
+An array supplies its values to the one-variable form and zero-based index/value pairs to the two-variable form. A map supplies keys or key/value pairs. Map traversal order is unspecified and does not preserve insertion order.
+
+Iteration takes a shallow snapshot before entering the loop. Adding or removing collection entries during the body therefore does not change which entries the current loop visits, although referenced mutable values remain shared. The iterator variables are scoped to the loop, and `break` and `continue` work as they do in other loops. Supplying anything other than an array or map is a runtime error.
+
 ### Complex numbers and mathematics
 
 - Imaginary literals such as `4i` are scanned and compiled directly.

@@ -203,6 +203,14 @@ fun rfind(array, n) {
     return nil;
 }
 
+fun to_map(array) {
+    var result = Map();
+    for (var i = 0; i < array.len; i = i + 1) {
+        result[i] = array[i];
+    }
+    return result;
+}
+
 // -----
 
 extend "array" "transf" transf;
@@ -218,3 +226,4 @@ extend "array" "count'" count';
 extend "array" "sort'" sort';
 extend "array" "find" find;
 extend "array" "rfind" rfind;
+extend "array" "to_map" to_map;

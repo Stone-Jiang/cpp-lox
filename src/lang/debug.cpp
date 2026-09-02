@@ -138,6 +138,8 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return simpleInstruction("OpCode::SET_INDEX", offset);
         case OpCode::EXTEND:
             return simpleInstruction("OpCode::EXTEND", offset);
+        case OpCode::ITER_SNAP:
+            return byteInstruction("OpCode::ITER_SNAP", chunk, offset);
         default:
             printf("Unknown opcode %d\n", ins);
             return offset + 1;

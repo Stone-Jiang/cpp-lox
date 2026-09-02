@@ -23,6 +23,7 @@ static const std::unordered_map<string, TokenType> keywords =
     {"break",  TokenType::BREAK},
     {"continue", TokenType::CONTINUE},
     {"extend", TokenType::EXTEND},
+    {"range",  TokenType::RANGE},
 };
 
 bool isAlpha(char c)
