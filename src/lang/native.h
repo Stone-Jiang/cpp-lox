@@ -59,8 +59,6 @@ struct NativeTypeDef
 };
 
 std::span<const NativeTypeDef> nativeTypeDefinitions() noexcept;
-const NativePropertyDef* findNativeProperty(
-    ObjType type, std::string_view name) noexcept;
-const NativeMethodDef* findNativeMethod(
-    ObjType type, std::string_view name) noexcept;
+const NativePropertyDef* findNativeProperty(ObjType type, std::string_view name) noexcept;
+const NativeMethodDef* findNativeMethod(ObjType type, std::string_view name) noexcept;
 bool hasNativeType(ObjType type) noexcept;

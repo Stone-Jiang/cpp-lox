@@ -1,6 +1,25 @@
-var a = "abcdefa";
-print a.find("bc");
-print a.find("af");
-print a.find("a");
-print a.rfind("a");
-print a.find(nil);
+class Zoo {
+  init() {
+    this.aardvark = 1;
+    this.baboon   = 2;
+    this.cat      = 4;
+    this.donkey   = 8;
+    this.elephant = 16;
+    this.fox      = 32;
+
+    this.fn = (\x => x+1);
+  }
+  ant()    { return this.aardvark; }
+  banana() { return this.baboon; }
+  tuna()   { return this.cat; }
+  hay()    { return this.donkey; }
+  grass()  { return this.elephant; }
+  mouse()  { return this.fox; }
+  static new() {return Zoo();}
+}
+
+var zoo = Zoo();
+
+var bound = zoo.get_method("banana");
+print bound.arity;
+print bound();

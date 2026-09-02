@@ -114,7 +114,7 @@ std::string to_string(const Obj* obj)
         return std::format("<err {}: {}>", errorKindName(error->kind), error->message->str());
     }
     case ObjType::INSTANCE:
-        return "<ins of cls " + as<ObjInstance>(obj)->klass->name->str() + ">";
+        return "<inst of cls " + as<ObjInstance>(obj)->klass->name->str() + ">";
     case ObjType::BOUND_METHOD:
         return to_string(as<ObjBoundMethod>(obj)->method->func);
     case ObjType::COMPLEX:

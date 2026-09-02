@@ -1,0 +1,57 @@
+// Higher-order map operations.
+// Map traversal order is unspecified, so these checks avoid order-sensitive output.
+
+fun make_numbers() {
+    var numbers = Map();
+    numbers["one"] = 1;
+    numbers["two"] = 2;
+    numbers["three"] = 3;
+    numbers["four"] = 4;
+    return numbers;
+}
+
+var numbers = make_numbers();
+
+// filter(): method and global forms return a new map.
+var evens = numbers.filter(\(key, value) => integral(value/2));
+print evens.len;                    // 2
+print evens.has_key("two");       // true
+print evens.has_key("four");      // true
+print numbers.len;                  // 4; original is unchanged
+
+var long_names = map_filter(numbers, \(key, value) => key.len > 3);
+print long_names.len;               // 2
+print long_names.has_key("one");  // false
+
+// transf_values(): transforms values in place.
+var doubled = numbers.copy();
+print doubled.transf_values(\value => value * 2); // nil
+print doubled["one"];             // 2
+print doubled["four"];            // 8
+print numbers["four"];            // 4; shallow outer copy is independent
+
+var incremented = numbers.copy();
+print transf_values(incremented, \value => value + 1); // nil
+print incremented["three"];       // 4
+
+// any() and all() short-circuit and leave the map unchanged.
+print numbers.any(\(key, value) => value > 3);          // true
+print map_any(numbers, \(key, value) => key == "none"); // false
+print numbers.all(\(key, value) => value > 0);          // true
+print map_all(numbers, \(key, value) => value < 4);     // false
+print numbers.len;                                      // 4
+
+// Use commutative folds because traversal order is unspecified.
+print numbers.foldl(0, \(sum, key, value) => sum + value);     // 10
+print map_foldl(numbers, 10, \(sum, key, value) => sum + value); // 20
+print numbers.foldr(0, \(key, value, sum) => sum + value);     // 10
+print map_foldr(numbers, 10, \(key, value, sum) => sum + value); // 20
+print numbers;
+
+// Empty-map edge cases.
+var empty = Map();
+print empty.filter(\(key, value) => true).len;       // 0
+print empty.any(\(key, value) => true);              // false
+print empty.all(\(key, value) => false);             // true
+print empty.foldl(7, \(acc, key, value) => acc + 1); // 7
+print empty.foldr(8, \(key, value, acc) => acc + 1); // 8

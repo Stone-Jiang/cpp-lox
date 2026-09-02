@@ -419,8 +419,12 @@ Result VM::run()
             break;
         }
         case OpCode::IS_ERROR:
-            push(Value(is<ObjError>(peek(0))));
+        {
+            const Value value = peek(0);
+            const bool flag = is<ObjError>(value) && as<ObjError>(value)->kind != ErrorKind::CRITICAL_ERROR;
+            push(Value(flag));
             break;
+        }
         case OpCode::RETURN:
         {
             Value result = pop();
@@ -603,11 +607,14 @@ Result VM::run()
             ObjString* name = read_str(frame);
             if(rejectError(receiver, "Can't access a property on an error value."))
                 return Result::RUNTIME_ERROR;
-            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            if(is<ObjInstance>(receiver) || is<ObjClass>(receiver))
             {
-                if(!getNativeProperty(receiver, name))
-                    return Result::RUNTIME_ERROR;
-                break;
+                if(findNativeProperty(objType(receiver), name->str()) != nullptr)
+                {
+                    if(!getNativeProperty(receiver, name))
+                        return Result::RUNTIME_ERROR;
+                    break;
+                }
             }
             if(is<ObjInstance>(receiver))
             {
@@ -621,6 +628,12 @@ Result VM::run()
                     return Result::RUNTIME_ERROR;
                 break;
             }
+            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            {
+                if(!getNativeProperty(receiver, name))
+                    return Result::RUNTIME_ERROR;
+                break;
+            }
 
             runtimeError("Only instances and classes have properties.");
             return Result::RUNTIME_ERROR;
@@ -631,7 +644,8 @@ Result VM::run()
             ObjString* name = read_str(frame);
             if(rejectError(receiver, "Can't assign a property on an error value."))
                 return Result::RUNTIME_ERROR;
-            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            if((is<ObjInstance>(receiver) || is<ObjClass>(receiver)) &&
+                findNativeProperty(objType(receiver), name->str()) != nullptr)
             {
                 if(!setNativeProperty(receiver, name))
                     return Result::RUNTIME_ERROR;
@@ -653,6 +667,12 @@ Result VM::run()
                 Value value = pop();
                 pop();
                 push(value);
+                break;
+            }
+            if(receiver.is_obj() && hasNativeType(objType(receiver)))
+            {
+                if(!setNativeProperty(receiver, name))
+                    return Result::RUNTIME_ERROR;
                 break;
             }
 
@@ -1539,9 +1559,6 @@ bool VM::invoke(ObjString* name, int argCount)
     if(rejectError(receiver, "Can't invoke a method on an error value."))
         return false;
 
-    if(receiver.is_obj() && hasNativeType(objType(receiver)))
-        return invokeNativeMethod(receiver, name, argCount);
-
     if(is<ObjInstance>(receiver))
     {
         auto instance = as<ObjInstance>(receiver);
@@ -1553,11 +1570,17 @@ bool VM::invoke(ObjString* name, int argCount)
             return callValue(value, argCount);
         }
 
+        if(findNativeMethod(ObjType::INSTANCE, name->str()) != nullptr)
+            return invokeNativeMethod(receiver, name, argCount);
+
         return invokeClass(instance->klass, name, argCount);
     }
 
     if(is<ObjClass>(receiver))
     {
+        if(findNativeMethod(ObjType::CLASS, name->str()) != nullptr)
+            return invokeNativeMethod(receiver, name, argCount);
+
         ClassMember member;
         if(!findMember(as<ObjClass>(receiver), name, member))
         {
@@ -1573,6 +1596,9 @@ bool VM::invoke(ObjString* name, int argCount)
         stackTop[-argCount-1] = member.value;
         return callValue(member.value, argCount);
     }
+
+    if(receiver.is_obj() && hasNativeType(objType(receiver)))
+        return invokeNativeMethod(receiver, name, argCount);
 
     runtimeError("Only instances and classes have methods.");
     return false;

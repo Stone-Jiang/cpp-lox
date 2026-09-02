@@ -59,6 +59,13 @@ public:
     bool del(ObjString* key);
     size_t size() const;
     void reserve(size_t cap);
+
+    template<typename Visitor>
+    void foreach(Visitor&& visitor) const
+    {
+        for(const auto& entry: m)
+            visitor(entry.first, entry.second);
+    }
 };
 
 class MemberTable
@@ -69,7 +76,7 @@ private:
     robin_hood::unordered_flat_map<ObjString*, ClassMember,
         robin_hood::hash<ObjString*>, std::equal_to<ObjString*>, MAX_LOAD_FACTOR_I> m;
     #else
-    std::unordered_map<ObjString*, ClassMember> m;
+    std::unordered_map<ObjString*, d> m;
     #endif
 
     VM* owner = nullptr;
@@ -89,6 +96,13 @@ public:
     bool del(ObjString* key);
     size_t size() const;
     void reserve(size_t cap);
+
+    template<typename Visitor>
+    void foreach(Visitor&& visitor) const
+    {
+        for(const auto& entry: m)
+            visitor(entry.first, entry.second);
+    }
 };
 
 class StringPool

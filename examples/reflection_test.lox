@@ -1,0 +1,109 @@
+// Reflection on instances and classes.
+
+class Base {
+    init(id) {
+        this.id = id;
+    }
+
+    describe() {
+        return "Base:" + str(this.id);
+    }
+
+    static category() {
+        return "base";
+    }
+}
+
+class Child < Base {
+    init(id, label) {
+        super.init(id);
+        this.label = label;
+    }
+
+    rename(label) {
+        this.label = label;
+        return this.label;
+    }
+
+    static create() {
+        return Child(0, "generated");
+    }
+}
+
+class Unrelated {}
+
+var item = Child(7, "original");
+
+// Instance class and ancestry checks.
+print item.cls == Child;          // true
+print item.is_ins(Child);         // true
+print item.is_ins(Base);          // true
+print item.is_ins(Unrelated);     // false
+
+// Field discovery returns snapshots, while accessors manipulate live fields.
+print item.has_field("id");      // true
+print item.has_field("missing"); // false
+print item.get_field("label");   // original
+print item.get_field("missing") else "missing field"; // missing field
+
+print item.set_field("label", "updated"); // false; replaced existing field
+print item.label;                         // updated
+print item.set_field("extra", 42);       // true; inserted new field
+print item.get_field("extra");           // 42
+
+var names = item.field_names();
+print names.count("id");          // 1
+print names.count("label");       // 1
+print names.count("extra");       // 1
+
+var snapshot = item.fields();
+print snapshot.len;                // 3
+print snapshot["label"];         // updated
+item.label = "after snapshot";
+print snapshot["label"];         // updated; snapshot is independent
+print item.label;                  // after snapshot
+
+print item.rmv_field("extra");   // nil
+print item.has_field("extra");   // false
+print item.rmv_field("extra") else "already removed"; // already removed
+
+// Method discovery includes inherited instance methods and excludes statics.
+print item.has_method("rename");   // true
+print item.has_method("describe"); // true
+print item.has_method("create");   // false
+
+var describe = item.get_method("describe");
+print describe();                   // Base:7
+print describe.arity;               // 0; receiver is already bound
+print item.get_method("create") else "static is not bindable"; // static is not bindable
+
+// Class metadata and inheritance relationships.
+print Base.name;                    // Base
+print Child.name;                   // Child
+print Child.superclass() == Base;   // true
+print Base.superclass();            // nil
+print Child.is_sub(Child);          // true
+print Child.is_sub(Base);           // true
+print Base.is_sub(Child);           // false
+print Base.is_sup(Child);           // true
+print Child.is_sup(Base);           // false
+
+var lineage = Child.superclasses();
+print lineage.len;                  // 2
+print lineage[0] == Child;          // true
+print lineage[1] == Base;           // true
+
+print Child.has_method("rename");   // true
+print Child.has_method("describe"); // true; inherited
+print Child.has_static("create");   // true
+print Child.has_static("category"); // true; inherited
+print Child.has_static("rename");   // false
+
+// all_method_names() reports members declared directly on the receiver class.
+// Values are booleans: false for instance methods and true for static members.
+var child_members = Child.all_method_names();
+print child_members.has_key("init");     // true
+print child_members["init"];            // false
+print child_members["rename"];          // false
+print child_members["create"];          // true
+print child_members.has_key("describe"); // false; inherited, not directly declared

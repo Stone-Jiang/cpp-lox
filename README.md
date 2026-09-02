@@ -24,7 +24,7 @@ python build.py --clean         # remove generated objects and executables
 
 The release executable is named `main`, and the debug executable is named `debug`. Use `--cc` to select a specific compiler.
 
-## Differences from the Original C Implementation
+## Implementation Details
 
 ### C++ runtime structure
 
@@ -38,7 +38,7 @@ The release executable is named `main`, and the debug executable is named `debug
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
 - Replaced messages and string handling with `std::string` and `std::string_view`, which provides simpler and more readable memory management with low cost.
 - Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
-- Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal cyan, though not harmful.
+- Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal cyan, though not really harmful.
 
 ### Configurable value and table implementations
 
@@ -60,6 +60,12 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 - Starting the executable without arguments opens a persistent REPL.
 - Inside the terminal REPL, `-r path/to/file.lox` runs a file using the current VM instance.
 - Inside the terminal REPL, enter `-q` to quit.
+
+### Notable points
+
+These are part of the original features but I just thought it would be better to emphasize that:
+- There is no universal base class like `object` in python.
+- Strings (and complex numbers in this extension) are *not* instances of a `String` (or `Complex`) class; they are native types. Calling methods on these is an extension feature, not a original one, and this feature is achieved by registering some functions as callable by using the dot operator.
 
 ## Language Extensions
 
@@ -145,8 +151,10 @@ Static methods participate in inherited member lookup. Instance methods remain b
 ### Native functions
 
 - `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
-- `system(string)` native runs a system command through C++ `system()`. **UNSAFE!! MIGHT CAUSE SERIOUS CRASHES! DO NOT PASS IN UNVERIFIED COMMANDS.**
+- `system(string)` native runs a system command through C++ `system()` function. **UNSAFE!! MIGHT CAUSE SERIOUS CRASHES! DO NOT PASS IN UNVERIFIED COMMANDS!**
 - `str(value)` converts everything into a string as how they would be printed.
+- `stod(string)` converts a string into a number; throws error if the string does not represent a number.
+- `integral(number)` returns true if the number is integral, otherwise false. This might be useful for array indexing since there's no built-in `int` type, as well as an alternative of modulus operation % as by `integral(x/2)`.
 
 ### Strings
 
@@ -435,28 +443,37 @@ print deep["items"];    // [1]
 
 #### Hash-key responsibility
 
-[!WARNING]
 Release builds provide a hash for every runtime value and do not reject object keys. Using mutable or otherwise unstable objects as keys is at the user's risk: changing state that participates in equality or hashing can make an entry surprising or unreachable. NaN is similarly unsafe because it is not equal to itself. Builds with `DEBUG_VALUE_TABLE` diagnose keys that are not considered stable.
 
 `invert()` promotes every value to a key, so inversion carries the same responsibility. Inverting a map whose values are mutable, unstable, NaN, or duplicated can reject the operation in a debug build or produce overwrite/lookup behavior that depends on those values in a release build.
 
 Maps strongly retain both keys and values for garbage collection. Map equality uses identity: two separately constructed maps are not equal merely because they contain equal entries.
 
-#### Planned higher-order map operations
+#### Higher-order map operations
 
-Higher-order map functions are not implemented yet. Their intended purposes and names are reserved clearly enough to guide the future API. Method form will be recommended; optional global forms will use the `map_` prefix to avoid collisions with array functions and `Map()`:
+Higher-order map operations are implemented in `src/lib/maps.lox` and are available in both method and global forms. Every callback has a fixed required arity; passing a non-function or a callback with the wrong arity produces a `TYPE` error.
 
-| Preferred method | Optional global form | Intended purpose |
-|---|---|---|
-| `m.foreach(fn)` | `map_foreach(m, fn)` | Visit each `(key, value)` pair for side effects |
-| `m.filter(fn)` | `map_filter(m, fn)` | Return a new map containing pairs accepted by the predicate |
-| `m.transform_values(fn)` | `map_transform_values(m, fn)` | Return a new map with transformed values and unchanged keys |
-| `m.transform_keys(fn)` | `map_transform_keys(m, fn)` | Return a new map with transformed keys; collisions overwrite according to traversal order |
-| `m.fold(initial, fn)` | `map_fold(m, initial, fn)` | Reduce all pairs to one accumulated value |
-| `m.any(fn)` | `map_any(m, fn)` | Test whether any pair satisfies a predicate |
-| `m.all(fn)` | `map_all(m, fn)` | Test whether every pair satisfies a predicate |
+| Preferred method | Global form | Callback arguments | Return value | Mutates receiver? | Behavior |
+|---|---|---|---|---:|---|
+| `m.filter(fn)` | `map_filter(m, fn)` | `(key, value)` | New map | No | Keeps entries for which `fn` is truthy |
+| `m.transf_values(fn)` | `transf_values(m, fn)` | `(value)` | `nil` | Yes | Replaces every value with the callback result; keys are unchanged |
+| `m.any(fn)` | `map_any(m, fn)` | `(key, value)` | Boolean | No | Returns `true` at the first truthy result; returns `false` for an empty map |
+| `m.all(fn)` | `map_all(m, fn)` | `(key, value)` | Boolean | No | Returns `false` at the first falsey result; returns `true` for an empty map |
+| `m.foldl(initial, fn)` | `map_foldl(m, initial, fn)` | `(accumulator, key, value)` | Final accumulator | No | Replaces the accumulator with each callback result |
+| `m.foldr(initial, fn)` | `map_foldr(m, initial, fn)` | `(key, value, accumulator)` | Final accumulator | No | Replaces the accumulator with each callback result |
 
-These names currently describe planned behavior only; calling them is not supported yet.
+`foldl()` and `foldr()` differ in the position of the accumulator argument, not in a guaranteed traversal direction. Map traversal order is unspecified, so folds should not rely on insertion order. For example:
+
+```lox
+var numbers = Map();
+numbers["one"] = 1;
+numbers["two"] = 2;
+
+var sum = numbers.foldl(0, \(acc, key, value) => acc + value);
+var keys = numbers.foldr("", \(key, value, acc) => acc + key);
+```
+
+Maps also provide `m.remove_all(keys...)` / `remove_all(m, keys...)`, which removes each supplied key and returns `nil`. It accepts zero or more keys and silently ignores keys that are absent.
 
 ### Variadic functions
 
@@ -561,6 +578,58 @@ Methods are:
 `readline()` preserves a trailing newline when the source line has one. `readlines()` follows the same rule for each returned element. Calls made after `close()`, reads from a write-only stream, writes to a read-only stream, and failures to open a path produce `IO` error values. Invalid arguments become `TYPE`, `VALUE`, or `RANGE` errors.
 
 The binding validates Lox values and delegates I/O and stream-state handling to the corresponding native `File` object. Assignment aliases the same file object; it does not duplicate an operating-system stream. A reachable file object keeps its stream alive, while an unreachable one is closed by RAII during garbage collection. Explicit `close()` remains recommended because garbage collection timing is intentionally unspecified.
+
+### Runtime Reflection
+
+Instances and classes expose native reflection properties and methods. These interfaces are attached directly to those runtime types; they are not inherited from a universal base object.
+
+Instance reflection:
+
+| Interface | Return value | Mutates instance? | Behavior |
+|---|---|---:|---|
+| `object.cls` | The object's concrete class | No | Read-only property |
+| `object.is_ins(class)` | Boolean | No | Tests whether the object is an instance of `class` or any subclass of it |
+| `object.fields()` | New shallow map | No | Copies the current field names and values; later field-table changes do not affect the map |
+| `object.field_names()` | New array of strings | No | Returns current field names in unspecified order |
+| `object.has_field(name)` | Boolean | No | Tests only stored instance fields |
+| `object.get_field(name)` | Stored value | No | Produces a `NAME` error when the field is absent |
+| `object.set_field(name, value)` | Boolean | Yes | Sets the field; returns `true` when inserted and `false` when overwritten |
+| `object.rmv_field(name)` | `nil` | Yes, when found | Removes the field; produces a `NAME` error when absent |
+| `object.has_method(name)` | Boolean | No | Tests for a non-static method, including inherited methods |
+| `object.get_method(name)` | Bound function | No | Binds a non-static method to the object; missing or static names produce an error |
+
+The maps and arrays returned by `fields()` and `field_names()` are snapshots with independent outer storage. Values inside the `fields()` map are copied shallowly, so referenced arrays, maps, instances, and other objects remain shared.
+
+Class reflection:
+
+| Interface | Return value | Behavior |
+|---|---|---|
+| `Class.name` | Class-name string | Read-only property |
+| `Class.is_sub(other)` | Boolean | Tests whether `Class` is `other` or derives from it |
+| `Class.is_sup(other)` | Boolean | Tests whether `Class` is `other` or is an ancestor of it |
+| `Class.superclass()` | Direct superclass, or `nil` | Does not search beyond the immediate parent |
+| `Class.superclasses()` | New array of classes | Returns `[Class, direct superclass, ...]` through the root class |
+| `Class.has_method(name)` | Boolean | Tests for a non-static method, including inherited methods |
+| `Class.has_static(name)` | Boolean | Tests for a static method, including inherited methods |
+| `Class.all_method_names()` | New map from names to booleans | Reports members declared directly on `Class`; `false` means instance method and `true` means static |
+
+Reflection names must be strings, and relationship arguments must be classes; invalid argument types produce `TYPE` errors. Class member traversal and instance field traversal use hash tables, so the order of returned names is unspecified. Currently, class reflections are mostly inspections.
+
+```lox
+class Base {
+  greet() { return "hello"; }
+  static create() { return Base(); }
+}
+
+class Child < Base {}
+var value = Child();
+
+value.set_field("answer", 42);
+print value.get_field("answer");  // 42
+print value.has_method("greet");  // true
+print Child.has_static("create"); // true
+print Child.superclass() == Base;  // true
+```
 
 ### Script extension methods
 

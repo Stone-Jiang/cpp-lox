@@ -7,7 +7,6 @@
 #include <array>
 #include <cmath>
 #include <format>
-#include <new>
 #include <stdexcept>
 
 namespace
@@ -35,7 +34,7 @@ NativeResult makeIndexError(Value index, size_t length, IndexResult reason)
 
 NativeResult arrayLength(VM&, Value receiver)
 {
-    const auto* array = as<ObjArray>(receiver);
+    auto array = as<ObjArray>(receiver);
     return NativeResult::success(Value(static_cast<double>(array->len())));
 }
 

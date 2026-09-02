@@ -4,6 +4,7 @@
 #include "../lib/files.h"
 #include "../lib/maps.h"
 #include "../lib/strings.h"
+#include "../lib/refl.h"
 #include "object.h"
 #include "vm.h"
 
@@ -125,7 +126,7 @@ NativeResult systemNative(VM&, int, Value* args)
 NativeResult stodNative(VM&, int, Value* args)
 {
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "tod() expects a string.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "stod() expects a string.", Value());
 
     try 
     {
@@ -189,6 +190,14 @@ std::span<const NativeTypeDef> nativeTypeDefinitions() noexcept
             ObjType::BOUND_METHOD,
             functionNativeProperties(),
             functionNativeMethods()},
+        NativeTypeDef{
+            ObjType::INSTANCE,
+            instanceNativeProperties(),
+            instanceNativeMethods()},
+        NativeTypeDef{
+            ObjType::CLASS,
+            classNativeProperties(),
+            classNativeMethods()},
     };
     return types;
 }

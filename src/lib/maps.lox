@@ -43,6 +43,7 @@ fun map_any(m, fn) {
             return true;
         }
     }
+    return false;
 }
 
 fun map_all(m, fn) {
@@ -59,7 +60,7 @@ fun map_all(m, fn) {
     return true;
 }
 
-fun map_foldl(array, p, fn) {
+fun map_foldl(m, p, fn) {
     var err = reqTernary(fn, __module, "zip");
     if(err != nil) {
         fail TYPE, err, fn;
@@ -72,7 +73,7 @@ fun map_foldl(array, p, fn) {
     return acc;
 }
 
-fun map_foldr(array, p, fn) {
+fun map_foldr(m, p, fn) {
     var err = reqTernary(fn, __module, "zip");
     if(err != nil) {
         fail TYPE, err, fn;

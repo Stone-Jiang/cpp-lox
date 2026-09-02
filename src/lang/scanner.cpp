@@ -1,5 +1,8 @@
 #include "scanner.h"
 
+
+namespace 
+{
 static const std::unordered_map<string, TokenType> keywords = 
 {
     {"and",    TokenType::AND},
@@ -37,7 +40,7 @@ bool isNumber(char c)
 {
     return c >= '0' && c <= '9';
 }
-
+}
 
 Scanner::Scanner(const string& str)
 {

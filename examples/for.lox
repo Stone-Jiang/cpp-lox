@@ -1,7 +1,7 @@
 var arr = [1,2,4,8,16];
 
 range (x, y: arr) {
-    print x;
+    print str(x)+"-"+str(y);
 }
 
 var m = arr.to_map().invert();
