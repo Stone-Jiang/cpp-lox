@@ -4,7 +4,7 @@ The scanner, Pratt parser/compiler, bytecode VM, closures, classes, string inter
 
 The implementation uses C++ types and lifetime management while keeping the runtime based on compact tagged values and objects rather than a virtual C++ class hierarchy.
 
-## Requirements and Building
+# Requirements and Building
 
 [!IMPORTANT]
 - A C++ **20** compiler available as `g++`, `clang++`, or `MSVC`.
@@ -24,9 +24,9 @@ python build.py --clean         # remove generated objects and executables
 
 The release executable is named `main`, and the debug executable is named `debug`. Use `--cc` to select a specific compiler.
 
-## Implementation Details
+# Implementation Details
 
-### C++ runtime structure
+## C++ runtime structure
 
 - Core runtime concepts are represented by C++ classes, strongly typed enums, and templated functions instead of groups of C structs, enums, and loosely related helper functions.
 - Runtime objects retain explicit `ObjType` tags. They do not use virtual methods or RTTI for dispatch, preserving the tagged-object model used by clox.
@@ -40,7 +40,7 @@ The release executable is named `main`, and the debug executable is named `debug
 - Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
 - Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal cyan, though not really harmful.
 
-### Configurable value and table implementations
+## Configurable value and table implementations
 
 `src/switches.h` controls two important implementation choices:
 
@@ -48,28 +48,28 @@ The release executable is named `main`, and the debug executable is named `debug
 - With `BETTER_HASH_TABLE` enabled, globals, fields, members, and interned strings use bundled [robin-hood flat hash containers](https://github.com/martinus/robin-hood-hashing). Without it, they use `std::unordered_map` and `std::unordered_set`.
 - String interning supports heterogeneous lookup by `std::string_view`, so a temporary heap string is not required merely to search the intern pool.
 
-### Native-function interface
+## Native-function interface
 
 Native functions are registered through compile-time `NativeDef` tables containing a name, arity, and function pointer. Each native receives the active `VM&`, which lets it allocate VM-owned objects and return detailed failures. `NativeResult` distinguishes success from failure and can carry an error kind, message, and optional Lox payload.
 
 Adding a native therefore does not require modifying the VM's call dispatch: define the function and add one entry to a native-definition table.
 
-### Runtime and command-line behavior
+## Runtime and command-line behavior
 
 - Supplying one path runs that source file directly.
 - Starting the executable without arguments opens a persistent REPL.
 - Inside the terminal REPL, `-r path/to/file.lox` runs a file using the current VM instance.
 - Inside the terminal REPL, enter `-q` to quit.
 
-### Notable points
+## Notable points
 
 These are part of the original features but I just thought it would be better to emphasize that:
 - There is no universal base class like `object` in python.
 - Strings (and complex numbers in this extension) are *not* instances of a `String` (or `Complex`) class; they are native types. Calling methods on these is an extension feature, not a original one, and this feature is achieved by registering some functions as callable by using the dot operator.
 
-## Language Extensions
+# Language Extensions
 
-### Loop control
+## Loop control
 
 `break` and `continue` are supported in `while` and `for` loops, including nested loops. The compiler rejects either keyword outside a loop and prevents loop control from crossing a function boundary.
 
@@ -87,7 +87,7 @@ An array supplies its values to the one-variable form and zero-based index/value
 
 Iteration takes a shallow snapshot before entering the loop. Adding or removing collection entries during the body therefore does not change which entries the current loop visits, although referenced mutable values remain shared. The iterator variables are scoped to the loop, and `break` and `continue` work as they do in other loops. Supplying anything other than an array or map is a runtime error.
 
-### Complex numbers and mathematics
+## Complex numbers and mathematics
 
 - Imaginary literals such as `4i` are scanned and compiled directly.
 - Arithmetic promotes real numbers when either operand is complex.
@@ -98,7 +98,7 @@ Iteration takes a shallow snapshot before entering the loop. Adding or removing 
 - Native math functions validate types, domains, ranges, and finite results instead of silently passing invalid results through the VM.
 - The numeric system directly uses C++ operations and library functions, meaning that there are floating-point inaccuracies and mathematically true expressions like `sin(1)/cos(1)==tan(1)` might evaluate to false. The only small change is that a value near zero (by 1e-11) is approximated to zero. If you want to compare whether two numbers are equal under a margin of error, use `~=`.
 
-### Error values and recovery
+## Error values and recovery
 
 Native functions and user defined functions can produce typed error values. This error-handling system is inspired by Rust/Haskell, in which when an error happens, an `ObjError` object is returned. An error is automatically unpacked if no error happens. If an error is unhandled and used directly (except for printing, reading meta info like `typeof()`, or functions specifically for handling functions), the VM screams and aborts the program.
 
@@ -130,7 +130,7 @@ fun requireNonNegative(value) {
 print requireNonNegative(-1) else 0;
 ```
 
-### Static methods and mutable class members
+## Static methods and mutable class members
 
 Methods declared with `static` can be called through a class or an object:
 
@@ -148,7 +148,7 @@ class Counter {
 
 Static methods participate in inherited member lookup. Instance methods remain bound to a receiver, and the compiler rejects `this` or `super` in static context. Class members can be replaced at runtime, for example `Counter.create = anotherFunction`.
 
-### Native functions
+## Native functions
 
 - `typeof(value)` native reports primitive and callable categories, classes, errors, and the concrete class name of an instance.
 - `system(string)` native runs a system command through C++ `system()` function. **UNSAFE!! MIGHT CAUSE SERIOUS CRASHES! DO NOT PASS IN UNVERIFIED COMMANDS!**
@@ -156,7 +156,7 @@ Static methods participate in inherited member lookup. Instance methods remain b
 - `stod(string)` converts a string into a number; throws error if the string does not represent a number.
 - `integral(number)` returns true if the number is integral, otherwise false. This might be useful for array indexing since there's no built-in `int` type, as well as an alternative of modulus operation % as by `integral(x/2)`.
 
-### Strings
+## Strings
 
 Strings are immutable and interned, same as the original design. Native string transformations build independent temporary storage and return an immutable string result; they never modify the receiver. Interning may reuse an existing object when the resulting text already exists, which is not observable through string value semantics.
 
@@ -180,7 +180,7 @@ print original;           //   Ab C
 
 New native string implementations belong in `src/lib/strings.cpp`. `makeStringResult()` centralizes conversion to an interned Lox string and translates allocation failures into `CRITICAL` native errors.
 
-### Arrays
+## Arrays
 
 Arrays are dynamically sized, mutable objects whose elements remain dynamically typed. Whitespace is insignificant in literals, and a trailing comma is allowed.
 
@@ -320,7 +320,7 @@ The script library currently provides:
 
 The read-only `arity` attribute reports a function's fixed parameter count. The standard-library methods use it to validate callbacks even when an array is empty.
 
-### Lambdas / Anonymous functions
+## Lambdas / Anonymous functions
 
 A lambda is defined in Haskell-fashion as `var a = \x => x + 1;`. They follow the same rules as functions in terms of being first-class, capable of assignment, capturing closures etc., but they can be anonymous. They can also be used on-spot.
 
@@ -364,7 +364,7 @@ var functions = [\x => x + 1];
 print functions[0](9); // expect: 10
 ```
 
-### Maps
+## Maps
 
 `Map()` constructs an empty, mutable hash map. Map variables have reference semantics: assignment aliases the same map, while `copy()` and `deep_copy()` create new map objects. Capacity, load factor, buckets, and the selected C++ hash-table implementation remain internal.
 
@@ -475,7 +475,7 @@ var keys = numbers.foldr("", \(key, value, acc) => acc + key);
 
 Maps also provide `m.remove_all(keys...)` / `remove_all(m, keys...)`, which removes each supplied key and returns `nil`. It accepts zero or more keys and silently ignores keys that are absent.
 
-### Variadic functions
+## Variadic functions
 
 A final named parameter followed by `...` collects all remaining arguments into a fresh array. The rest array is created for every call, including calls with no extra arguments:
 
@@ -521,7 +521,7 @@ var bad = \x, y => x + y;
 var bad = \x x + 1;
 ```
 
-### File I/O
+## File IO
 
 `open(path, mode)` returns a garbage-collected file object backed by the native `File` wrapper. The mode is optional and defaults to `"r"`. Relative paths are resolved from the process's current working directory, so the examples below should be run from the project root. File objects expose stream operations only; filesystem controls such as deleting, renaming, or listing paths are not part of this API.
 
@@ -579,7 +579,7 @@ Methods are:
 
 The binding validates Lox values and delegates I/O and stream-state handling to the corresponding native `File` object. Assignment aliases the same file object; it does not duplicate an operating-system stream. A reachable file object keeps its stream alive, while an unreachable one is closed by RAII during garbage collection. Explicit `close()` remains recommended because garbage collection timing is intentionally unspecified.
 
-### Runtime Reflection
+## Runtime Reflection
 
 Instances and classes expose native reflection properties and methods. These interfaces are attached directly to those runtime types; they are not inherited from a universal base object.
 
@@ -631,7 +631,7 @@ print Child.has_static("create"); // true
 print Child.superclass() == Base;  // true
 ```
 
-### Script extension methods
+## Script extension methods
 
 Script functions can be registered as extension methods at top level. The registered implementation receives the method receiver as its first argument:
 
@@ -663,7 +663,7 @@ value.method(a, b)
 
 Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
 
-## Playground
+# Playground
 
 The local web playground provides a source editor, program output, and a persistent REPL. It uses the existing Craft executable, so build the project before starting the playground.
 
