@@ -247,7 +247,7 @@ NativeResult arraySlice(VM& vm, Value receiver, int, Value* args)
     if(rhi.result!=IndexResult::OK && rhi.result!=IndexResult::END)
         return makeIndexError(hi, array->len(), rhi.result);
     if(rlo.index > rhi.index)
-        return NativeResult::failure(ErrorKind::VALUE_ERROR, "Slice lo is greater than hi.", Value());
+        return NativeResult::failure(ErrorKind::VALUE_ERROR, "Slice lo is greater than hi.");
 
     auto slice = makeObj<ObjArray>(vm);
 
@@ -277,7 +277,7 @@ NativeResult arrayJoin(VM& vm, Value receiver, int, Value* args)
 {
     auto sep = args[0];
     if(!sep.is_obj() || !is<ObjString>(sep))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "Separator must be a string.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "Separator must be a string.");
 
     auto array = as<ObjArray>(receiver);
 
@@ -297,6 +297,20 @@ NativeResult arraySort(VM&, Value receiver, int, Value*)
     auto array = as<ObjArray>(receiver);
     std::sort(array->elements.begin(), array->elements.end());    
     return NativeResult::success(Value());
+}
+
+NativeResult arrayMin(VM&, Value receiver, int, Value*)
+{
+    auto array = as<ObjArray>(receiver);
+    auto it = std::min_element(array->elements.begin(), array->elements.end());
+    return NativeResult::success(*it);
+}
+
+NativeResult arrayMax(VM&, Value receiver, int, Value*)
+{
+    auto array = as<ObjArray>(receiver);
+    auto it = std::max_element(array->elements.begin(), array->elements.end());
+    return NativeResult::success(*it);
 }
 
 // -----
@@ -322,6 +336,8 @@ constexpr std::array methods {
     NativeMethodDef{"slice", 2, arraySlice},
     NativeMethodDef{"join", 1, arrayJoin},
     NativeMethodDef{"sort", 0, arraySort},
+    NativeMethodDef{"min", 0, arrayMin},
+    NativeMethodDef{"max", 0, arrayMax},
 };
 
 }

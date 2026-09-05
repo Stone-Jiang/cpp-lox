@@ -2,6 +2,7 @@
 #include "../lib/files.h"
 #include "../lib/maps.h"
 #include "../lib/math.h"
+#include "../lib/stats.h"
 #include "../utils/color.h"
 #include <algorithm>
 
@@ -211,8 +212,7 @@ public:
     TempRootGuard& operator=(const TempRootGuard& other) = delete;
 };
 
-VM::VM():
-    globals(this), strings(this), grayStack(this),
+VM::VM():globals(this), strings(this), grayStack(this),
     arrayExt(this), stringExt(this), mapExt(this), functionExt(this)
 {
     const auto natives = nativeDefinitions();
@@ -222,13 +222,12 @@ VM::VM():
 
     for(const auto& nat: natives)
         defineNative(nat);
-
     for(const auto& nat: mathNativeDefinitions())
         defineNative(nat);
-
+    for(const auto& nat: statsNativeDefinitions())
+        defineNative(nat);
     for(const auto& nat: fileNativeDefinitions())
         defineNative(nat);
-
     for(const auto& nat: mapNativeDefinitions())
         defineNative(nat);
 }

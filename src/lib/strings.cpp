@@ -133,7 +133,7 @@ NativeResult stringSubstr(VM& vm, Value receiver, int, Value* args)
     if(rhi.result!=IndexResult::OK && rhi.result!=IndexResult::END)
         return makeIndexError(hi, length, rhi.result);
     if(rlo.index > rhi.index)
-        return NativeResult::failure(ErrorKind::VALUE_ERROR, "Substring lo is greater than hi.", Value());
+        return NativeResult::failure(ErrorKind::VALUE_ERROR, "Substring lo is greater than hi.");
 
     return NativeResult::success(Value(copyString(vm, str->str().substr(rlo.index, rhi.index-rlo.index))));
 }
@@ -143,7 +143,7 @@ NativeResult stringFind(VM&, Value receiver, int, Value* args)
     auto str = as<ObjString>(receiver);
     
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String rfind() method expects a string as argument.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String rfind() method expects a string as argument.");
 
     size_t index = str->str().find(as<ObjString>(args[0])->str());
     return NativeResult::success(index>str->str().length()? Value(): Value(static_cast<double>(index)));
@@ -154,7 +154,7 @@ NativeResult stringRfind(VM&, Value receiver, int, Value* args)
     auto str = as<ObjString>(receiver);
     
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .rfind() method expects a string as argument.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .rfind() method expects a string as argument.");
 
     size_t index = str->str().rfind(as<ObjString>(args[0])->str());
     return NativeResult::success(index>str->str().length()? Value(): Value(static_cast<double>(index)));
@@ -165,7 +165,7 @@ NativeResult stringStartsWith(VM&, Value receiver, int, Value* args)
     auto str = as<ObjString>(receiver);
     
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .startswith() method expects a string as argument.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .startswith() method expects a string as argument.");
 
     bool b = str->str().starts_with(as<ObjString>(args[0])->str());
     return NativeResult::success(Value(b));
@@ -176,7 +176,7 @@ NativeResult stringEndsWith(VM&, Value receiver, int, Value* args)
     auto str = as<ObjString>(receiver);
     
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .endswith() method expects a string as argument.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "String .endswith() method expects a string as argument.");
 
     bool b = str->str().ends_with(as<ObjString>(args[0])->str());
     return NativeResult::success(Value(b));

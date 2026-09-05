@@ -80,8 +80,8 @@ print item.get_method("create") else "static is not bindable"; // static is not 
 // Class metadata and inheritance relationships.
 print Base.name;                    // Base
 print Child.name;                   // Child
-print Child.superclass() == Base;   // true
-print Base.superclass();            // nil
+print Child.superclass == Base;   // true
+print Base.superclass;            // nil
 print Child.is_sub(Child);          // true
 print Child.is_sub(Base);           // true
 print Base.is_sub(Child);           // false

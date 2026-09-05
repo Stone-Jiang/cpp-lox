@@ -26,7 +26,7 @@ NativeResult insClass(VM&, Value receiver)
 NativeResult isInstance(VM&, Value receiver, int, Value* args)
 {
     if(!is<ObjClass>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "is_ins() expects a class.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "is_ins() expects a class.");
     
     auto ins = as<ObjInstance>(receiver);
     auto cls = ins->klass;
@@ -199,12 +199,34 @@ NativeResult insGetMethod(VM& vm, Value receiver, int, Value* args)
     return NativeResult::success(Value(bound));
 }
 
+NativeResult insGet(VM& vm, Value receiver, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "get_method() expects a string name.");
+
+    auto ins = as<ObjInstance>(receiver);
+
+    auto field = insGetField(vm, receiver, 1, args);
+    auto method = insGetMethod(vm, receiver, 1, args);
+    if(field.ok)
+        return field;
+    else if(method.ok)
+        return method;
+    return NativeResult::failure(ErrorKind::NAME_ERROR, std::format("get: '{}' has no field/method named '{}'.", to_string(ins), as<ObjString>(args[0])->str()), receiver);
+}
+
 // -----
 
 NativeResult clsName(VM&, Value receiver)
 {
     const auto cls = as<ObjClass>(receiver);
     return NativeResult::success(Value(cls->name));
+}
+
+NativeResult clsSuperclass(VM&, Value receiver)
+{
+    auto cls = as<ObjClass>(receiver);
+    return NativeResult::success(cls->superclass==nullptr? Value(): Value(cls->superclass));
 }
 
 NativeResult isSubclass(VM&, Value receiver, int, Value* args)
@@ -241,12 +263,6 @@ NativeResult isSuperclass(VM&, Value receiver, int, Value* args)
     return NativeResult::success(Value(false));
 }
 
-NativeResult clsSuperclass(VM&, Value receiver, int, Value*)
-{
-    auto cls = as<ObjClass>(receiver);
-    return NativeResult::success(cls->superclass==nullptr? Value(): Value(cls->superclass));
-}
-
 NativeResult clsSuperclasses(VM& vm, Value receiver, int, Value*)
 {
     auto cls = as<ObjClass>(receiver);
@@ -262,8 +278,6 @@ NativeResult clsSuperclasses(VM& vm, Value receiver, int, Value*)
     vm.pop();
     return NativeResult::success(Value(arr));
 }
-
-
 
 NativeResult clsHasMethod(VM&, Value receiver, int, Value* args)
 {
@@ -289,6 +303,35 @@ NativeResult clsHasStatic(VM&, Value receiver, int, Value* args)
         return NativeResult::success(Value(true));
     else
         return NativeResult::success(Value(false));
+}
+
+NativeResult clsGetStatic(VM&, Value receiver, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(ErrorKind::TYPE_ERROR,"get_static() expects a string name.");
+
+    auto cls = as<ObjClass>(receiver);
+    auto name = as<ObjString>(args[0]);
+    ClassMember member;
+
+    if(!findClassMember(cls, name, member))
+    {
+        return NativeResult::failure(ErrorKind::NAME_ERROR, std::format("get_static: '{}' has no static method named '{}'.", to_string(cls), name->str()), receiver);
+    }
+
+    if(!member.isStatic)
+    {
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, std::format("'{}' is an instance method, not a static method.", name->str()), receiver);
+    }
+
+    if(!is<ObjClosure>(member.value) && !is<ObjNative>(member.value) && !is<ObjBoundMethod>(member.value))
+    {
+        return NativeResult::failure(ErrorKind::TYPE_ERROR,std::format("Static member '{}' is not callable.", name->str()),receiver);
+    }
+
+    // Static methods do not receive a class or instance receiver. Their
+    // closure already retains any lexical upvalues it needs.
+    return NativeResult::success(member.value);
 }
 
 NativeResult clsAllMethodNames(VM& vm, Value receiver, int, Value*)
@@ -326,7 +369,6 @@ NativeResult clsAllMethodNames(VM& vm, Value receiver, int, Value*)
 }
 
 
-
 // -----
 
 constexpr std::array instanceProperties {
@@ -343,19 +385,21 @@ constexpr std::array instanceMethods {
     NativeMethodDef{"rmv_field", 1, insRemoveField},
     NativeMethodDef{"has_method", 1, insHasMethod},
     NativeMethodDef{"get_method", 1, insGetMethod},
+    NativeMethodDef{"get", 1, insGet},
 };
 
 constexpr std::array classProperties {
     NativePropertyDef{"name", clsName},
+    NativePropertyDef{"superclass", clsSuperclass},
 };
 
 constexpr std::array classMethods {
     NativeMethodDef{"is_sub", 1, isSubclass},
     NativeMethodDef{"is_sup", 1, isSuperclass},
-    NativeMethodDef{"superclass", 0, clsSuperclass},
     NativeMethodDef{"superclasses", 0, clsSuperclasses},
     NativeMethodDef{"has_method", 1, clsHasMethod},
     NativeMethodDef{"has_static", 1, clsHasStatic},
+    NativeMethodDef{"get_static", 1, clsGetStatic},
     NativeMethodDef{"all_method_names", 0, clsAllMethodNames},
 
 };

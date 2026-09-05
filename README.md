@@ -607,7 +607,7 @@ Class reflection:
 | `Class.name` | Class-name string | Read-only property |
 | `Class.is_sub(other)` | Boolean | Tests whether `Class` is `other` or derives from it |
 | `Class.is_sup(other)` | Boolean | Tests whether `Class` is `other` or is an ancestor of it |
-| `Class.superclass()` | Direct superclass, or `nil` | Does not search beyond the immediate parent |
+| `Class.superclass` | Direct superclass, or `nil` | Does not search beyond the immediate parent |
 | `Class.superclasses()` | New array of classes | Returns `[Class, direct superclass, ...]` through the root class |
 | `Class.has_method(name)` | Boolean | Tests for a non-static method, including inherited methods |
 | `Class.has_static(name)` | Boolean | Tests for a static method, including inherited methods |

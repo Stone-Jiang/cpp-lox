@@ -41,8 +41,7 @@ namespace
 {
 NativeResult clockNative(VM&, int, Value*)
 {
-    return NativeResult::success(
-        Value(static_cast<double>(std::clock()) / CLOCKS_PER_SEC));
+    return NativeResult::success(Value(static_cast<double>(std::clock()) / CLOCKS_PER_SEC));
 }
 
 NativeResult typeNative(VM& vm, int, Value* args)
@@ -117,7 +116,7 @@ NativeResult integralNative(VM&, int, Value* args)
 NativeResult systemNative(VM&, int, Value* args)
 {
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "system() expects a string.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "system() expects a string.");
 
     system(as_cstr(args[0]));
     return NativeResult::success(Value());
@@ -126,7 +125,7 @@ NativeResult systemNative(VM&, int, Value* args)
 NativeResult stodNative(VM&, int, Value* args)
 {
     if(!is<ObjString>(args[0]))
-        return NativeResult::failure(ErrorKind::TYPE_ERROR, "stod() expects a string.", Value());
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "stod() expects a string.", Value(0.0));
 
     try 
     {
@@ -143,6 +142,22 @@ NativeResult stodNative(VM&, int, Value* args)
     }
 }
 
+NativeResult inputNative(VM& vm, int, Value* args)
+{   
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, "input() expects a string as argument.");
+
+    const auto& prompt = as<ObjString>(args[0])->chars;
+    if(!prompt.empty())
+        std::cout<<prompt<<std::flush;
+
+    std::string line;
+    if(!std::getline(std::cin, line))
+        return NativeResult::failure(ErrorKind::IO_ERROR, "input() receives no input.");
+
+    return NativeResult::success(Value(copyString(vm, line)));
+}
+
 constexpr std::array definitions {
     NativeDef{"clock", 0, clockNative},
     NativeDef{"typeof", 1, typeNative},
@@ -150,6 +165,7 @@ constexpr std::array definitions {
     NativeDef{"integral", 1, integralNative},
     NativeDef{"system", 1, systemNative},
     NativeDef{"stod", 1, stodNative},
+    NativeDef{"input", 1, inputNative},
 };
 
 }
