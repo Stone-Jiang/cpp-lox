@@ -12,10 +12,10 @@ class Parser
 {
     friend class Compiler;
 private:
-    Token cur;
-    Token prev;
     bool hadError = false;
     bool panic = false;
+    Token cur;
+    Token prev;
 };
 
 enum class Prec: u8
@@ -24,6 +24,7 @@ enum class Prec: u8
     OR, AND, EQUALITY, COMPARISON,
     TERM, FACTOR, UNARY, CALL, PRIMARY
 };
+
 inline bool operator<=(Prec p1, Prec p2)
 {
     return static_cast<int>(p1) <= static_cast<int>(p2);
@@ -50,9 +51,9 @@ struct RulesMaker
 
 struct Local
 {
-    Token name; 
-    int depth = 0; 
     bool isCapt = false;
+    int depth = 0; 
+    Token name; 
 };
 
 struct Upvalue
@@ -74,16 +75,16 @@ enum class MethodContext: u8
 class ClassCompiler
 {
 public:
-    ClassCompiler* enclosing = nullptr;
     bool hasSuper = false;
+    ClassCompiler* enclosing = nullptr;
 };
 
 class LoopCompiler
 {
 public:
-    LoopCompiler* enclosing = nullptr;
     int scopeDepth = 0;
     int continueTarget = 0;
+    LoopCompiler* enclosing = nullptr;
     Vector<int> breakJumps;
 
     explicit LoopCompiler(VM* owner = nullptr): breakJumps(owner) {}
@@ -126,6 +127,7 @@ public:
         if(current == this)
             current = enclosing;
     }
+
     Compiler(Compiler& other) = delete;
     Compiler& operator=(Compiler& other) = delete;
 
@@ -134,17 +136,57 @@ public:
     void markCompilerRoots(VM& vm);
 
 private:
-    void advance();
-    void consume(TokenType type, const std::string& msg);
-    bool check(TokenType type);
-    bool match(TokenType type);
+    inline void advance()
+    {
+        parser.prev = parser.cur;
+        while(true)
+        {
+            parser.cur = scanner->scan();
+            if(parser.cur.type != TokenType::ERROR)
+                break;
+            errorAtCur(parser.cur.start);
+        }
+    }
+
+    inline void consume(TokenType type, const std::string& msg)
+    {
+        if(parser.cur.type == type)
+        {
+            advance();
+            return;
+        }
+        errorAtCur(msg);
+    }
+
+    inline bool check(TokenType type)
+    {
+        return parser.cur.type == type;
+    }
+
+    inline bool match(TokenType type)
+    {
+        if(!check(type))
+            return false;
+        advance();
+        return true;
+    }
+
     void errorAt(Token& token, const std::string& msg);
     void error(const std::string& msg);
     void errorAtCur(const std::string& msg);
 
     ObjFunction* end();
-    void emit(u8 byte);
-    void emit(u8 byte1, u8 byte2);
+
+    inline void emit(u8 byte)
+    {
+        currentChunk()->write(byte, parser.prev.line);
+    }
+
+    inline void emit(u8 byte1, u8 byte2)
+    {
+        emit(byte1);
+        emit(byte2);
+    }
 
     void emitReturn();
     u8 makeConstant(Value value);
@@ -221,7 +263,7 @@ private:
     Token syntheticToken(const char* text);
     void synchronize();
 
-    Chunk* currentChunk()
+    inline Chunk* currentChunk()
     {
         return &current->func->chunk;
     }

@@ -1,0 +1,28 @@
+fun collect(first, rest...) {
+    print first;
+    return rest;
+}
+
+print collect(1);
+print collect(1, 2, "three", [4]);
+
+fun collectAll(values...) {
+    values.push("end");
+    return values;
+}
+
+print collectAll();
+print collectAll(1, 2);
+
+var tail = \(first, rest...) => rest;
+print tail(10, 20, 30);
+
+fun captureRest(values...) {
+    fun read() {
+        return values;
+    }
+    return read;
+}
+
+var readRest = captureRest("kept", [1, 2]);
+print readRest();

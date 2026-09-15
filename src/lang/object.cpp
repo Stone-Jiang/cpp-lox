@@ -2,30 +2,6 @@
 #include "../utils/color.h"
 #include <iomanip>
 
-ObjType objType(const Value& value)
-{
-    if(value.is_obj())
-        return value.as_obj()->type;
-    return ObjType::NONE;
-}
-
-bool isType(const Value& value, ObjType type)
-{
-    return value.is_obj() && value.as_obj()!=nullptr && value.as_obj()->type == type;
-}
-
-const string& as_string(const Value& value)
-{
-    return as<ObjString>(value)->str();
-}
-
-const char* as_cstr(const Value& value)
-{
-    return as_string(value).c_str();
-}
-
-// -----
-
 namespace
 {
 string formatNumber(double value)
@@ -189,6 +165,64 @@ std::string to_string(const ObjMap* map)
 void printValue(const Value& value)
 {
     std::printf("%s", to_string(value).c_str());
+}
+
+std::string type_string(const Value& value)
+{
+    std::string type;
+
+    if(value.is_number())
+        type = "number";
+    else if(value.is_nil())
+        type = "nil";
+    else if(value.is_bool())
+        type = "bool";
+    else
+    {
+        switch(objType(value))
+        {
+        case ObjType::FUNCTION:
+        case ObjType::CLOSURE:
+        case ObjType::NATIVE:
+        case ObjType::BOUND_METHOD:
+            type = "fun";
+            break;
+        case ObjType::ERROR:
+            type = "error";
+            break;
+        case ObjType::CLASS:
+            type = "class";
+            break;
+        case ObjType::INSTANCE:
+            type = as<ObjInstance>(value)->klass->name->str();
+            break;
+        case ObjType::ARRAY:
+            type = "array";
+            break;
+        case ObjType::MAP:
+            type = "map";
+            break;
+        case ObjType::FILE:
+            type = "file";
+            break;
+        case ObjType::STRING:
+            type = "string";
+            break;
+        case ObjType::COMPLEX:
+            type = "complex";
+            break;
+        case ObjType::UPVALUE:
+            type = "upvalue";
+            break;
+        case ObjType::OBJ:
+            type = "obj?";
+            break;
+        case ObjType::NONE:
+            type = "none?";
+            break;
+        }
+    }
+    return type;
 }
 
 bool is_integral(const Value& value)

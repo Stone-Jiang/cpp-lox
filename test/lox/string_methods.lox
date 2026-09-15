@@ -1,0 +1,11 @@
+var original = "  Ab C  ";
+
+print original.len;
+print original.upper();
+print original.lower();
+print original.trim();
+print original.reverse();
+print original;
+
+print "".len;
+print "".trim();

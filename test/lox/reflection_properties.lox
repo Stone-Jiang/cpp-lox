@@ -1,0 +1,32 @@
+class Base {
+    method() { return "lox method"; }
+    static label() { return "base"; }
+}
+
+class Child < Base {}
+
+var object = Child();
+object.data = 42;
+
+print object.data;             // 42
+print object.method();         // lox method
+print object.cls == Child;     // true
+print Child.name;              // Child
+print object.is_ins(Base);     // true
+print Child.is_sub(Base);      // true
+print object.has_method("method"); // true: inherited instance method
+print Child.has_method("method");  // true: inherited instance method
+print Child.has_static("label");   // true: inherited static method
+var staticLabel = Child.get_static("label");
+print staticLabel();                // base
+
+// Only exact registered reflection names are read-only. The assignment
+// evaluates to an error value rather than replacing the internal attribute.
+print object.cls = Base;
+print object.cls == Child;     // true
+print Child.name = "Renamed";
+print Child.name;              // Child
+
+// Unrelated fields remain writable after a rejected reflection assignment.
+object.data = 99;
+print object.data;             // 99

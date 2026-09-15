@@ -1,0 +1,20 @@
+var path = "test/file_io_smoke.txt";
+var out = open(path, "w");
+print out.name;
+print out.mode;
+print out.writable;
+print out.write("one\ntwo");
+out.close();
+print out.closed;
+
+var input = open(path);
+print input.readable;
+print input.readline();
+input.seek(0);
+print input.readlines();
+input.seek(0, 0);
+print input.read(3);
+print input.tell();
+print input.eof;
+print input.size;
+input.close();

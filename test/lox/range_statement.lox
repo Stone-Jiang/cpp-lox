@@ -1,0 +1,55 @@
+var values = [10, 20, 30];
+
+var sum = 0;
+range (value : values) {
+    sum = sum + value;
+}
+print sum; // 60
+
+var indexed = 0;
+range (index, value : values) {
+    indexed = indexed + index * value;
+}
+print indexed; // 80
+
+var map = Map();
+map["a"] = 1;
+map["b"] = 2;
+
+var keyCount = 0;
+range (key : map) {
+    keyCount = keyCount + 1;
+}
+print keyCount; // 2
+
+var valueSum = 0;
+range (key, value : map) {
+    valueSum = valueSum + value;
+}
+print valueSum; // 3
+
+// Iteration uses a shallow snapshot, so structural mutation does not extend
+// the current traversal.
+var visits = 0;
+range (value : values) {
+    visits = visits + 1;
+    values.push(value);
+}
+print visits;     // 3
+print values.len; // 6
+
+var continued = 0;
+range (value : [1, 2, 3, 4]) {
+    if (value == 2) continue;
+    if (value == 4) break;
+    continued = continued + value;
+}
+print continued; // 4
+
+// The source expression is evaluated before the iterator variable is bound.
+var shadowed = [7, 8];
+var shadowSum = 0;
+range (shadowed : shadowed) {
+    shadowSum = shadowSum + shadowed;
+}
+print shadowSum; // 15

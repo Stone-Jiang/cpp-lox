@@ -1,0 +1,20 @@
+var values = [1, 2, 3];
+
+print map(values, \x => x * 2);
+print values.map(\x => x + 1);
+print values;
+
+print values.foreach(\x => x * 10);
+print values;
+
+print [].map(123);
+print [].map(\(a, b) => a + b);
+
+fun applyTwice(fn, value) {
+    return fn(fn(value));
+}
+
+extend "function" "twice" applyTwice;
+var increment = \x => x + 1;
+print increment.twice(40);
+print increment.arity;

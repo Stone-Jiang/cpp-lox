@@ -37,9 +37,9 @@ struct Obj
     static constexpr ObjType basetype = ObjType::OBJ;
 
     VM* owner = nullptr;
-    ObjType type;
     Obj* next = nullptr;
     bool marked = false;
+    ObjType type;
 
     Obj(VM* owner, ObjType type): owner(owner), type(type) {}
 };
@@ -47,6 +47,7 @@ struct Obj
 struct ObjString: Obj
 {
     static constexpr ObjType basetype = ObjType::STRING;
+
     const std::string chars;
     const size_t hash;
 
@@ -62,6 +63,7 @@ struct ObjString: Obj
 struct ObjComplex: Obj
 {
     static constexpr ObjType basetype = ObjType::COMPLEX;
+
     std::complex<double> c;
 
     ObjComplex(VM* owner): Obj(owner, basetype), c(0, 0) {}
@@ -71,12 +73,13 @@ struct ObjComplex: Obj
 struct ObjFunction: Obj
 {
     static constexpr ObjType basetype = ObjType::FUNCTION;
+
+    Chunk chunk;
+    ObjString* name = nullptr;
     int arity = 0;
     int upvalCount = 0;
-    Chunk chunk;
     bool variadic = false;
-    ObjString* name = nullptr;
-
+    
     ObjFunction(VM* owner, ObjString* functionName = nullptr):
         Obj(owner, basetype), chunk(owner), name(functionName) {}
 };
@@ -84,6 +87,7 @@ struct ObjFunction: Obj
 struct ObjNative: Obj
 {
     static constexpr ObjType basetype = ObjType::NATIVE;
+
     NativeFn func;
     int arity;
 
@@ -93,6 +97,7 @@ struct ObjNative: Obj
 struct ObjUpvalue: Obj
 {
     static constexpr ObjType basetype = ObjType::UPVALUE;
+
     Value* location = nullptr;
     Value closed;
     ObjUpvalue* next = nullptr;
@@ -103,8 +108,9 @@ struct ObjUpvalue: Obj
 struct ObjClosure: Obj
 {
     static constexpr ObjType basetype = ObjType::CLOSURE;
-    ObjFunction* func = nullptr;
+
     Vector<ObjUpvalue*> upvalues;
+    ObjFunction* func = nullptr;
     int upvalueCount;
 
     ObjClosure(VM* owner, ObjFunction* f): Obj(owner, basetype), upvalues(owner)
@@ -120,16 +126,18 @@ struct ObjClosure: Obj
 struct ObjClass: Obj
 {
     static constexpr ObjType basetype = ObjType::CLASS;
+
+    MemberTable members;
     ObjString* name = nullptr;
     ObjClass* superclass = nullptr;
-    MemberTable members;
 
-    ObjClass(VM* owner, ObjString* name): Obj(owner, basetype), name(name), members(owner) {}
+    ObjClass(VM* owner, ObjString* name): Obj(owner, basetype), members(owner), name(name) {}
 };
 
 struct ObjError: Obj
 {
     static constexpr ObjType basetype = ObjType::ERROR;
+
     ErrorKind kind = ErrorKind::USER_ERROR;
     ObjString* message = nullptr;
     Value payload;
@@ -141,16 +149,18 @@ struct ObjError: Obj
 struct ObjInstance: Obj
 {
     static constexpr ObjType basetype = ObjType::INSTANCE;
-    ObjClass* klass = nullptr;
+
     Table fields;
+    ObjClass* klass = nullptr;
 
     ObjInstance(VM* owner, ObjClass* klass): 
-        Obj(owner, basetype), klass(klass), fields(owner) {}
+        Obj(owner, basetype), fields(owner), klass(klass) {}
 };
 
 struct ObjBoundMethod: Obj
 {
     static constexpr ObjType basetype = ObjType::BOUND_METHOD;
+
     Value receiver;
     ObjClosure* method = nullptr;
 
@@ -161,6 +171,7 @@ struct ObjBoundMethod: Obj
 struct ObjArray: Obj
 {
     static constexpr ObjType basetype = ObjType::ARRAY;
+
     Vector<Value> elements;
 
     inline size_t len() const
@@ -174,6 +185,7 @@ struct ObjArray: Obj
 struct ObjFile: Obj
 {
     static constexpr ObjType basetype = ObjType::FILE;
+
     utils::File file;
 
     ObjFile(VM* owner, const std::string& path, const std::string& mode): Obj(owner, ObjType::FILE), file(path, mode) {}
@@ -182,6 +194,7 @@ struct ObjFile: Obj
 struct ObjMap: Obj
 {
     static constexpr ObjType basetype = ObjType::MAP;
+
     ValueTable vt;
 
     ObjMap(VM* owner): Obj(owner, basetype), vt(owner) {}
@@ -194,40 +207,79 @@ struct ObjMap: Obj
 
 // -----
 
-ObjType objType(const Value& value);
-bool isType(const Value& value, ObjType type);
+#ifndef RELEASE_UNCHECKED_CAST
+
+inline ObjType objType(const Value& value)
+{
+    if(value.is_obj())
+        return value.as_obj()->type;
+    return ObjType::NONE;
+}
+
+#else
+
+inline ObjType objType(const Value& value)
+{
+    return value.as_obj()->type;
+}
+
+#endif
+
+inline bool isType(const Value& value, ObjType type)
+{
+    return value.is_obj() && value.as_obj()!=nullptr && value.as_obj()->type == type;
+}
 
 template <class T>
 concept Objective = std::is_base_of_v<Obj, T>;
 
 template <Objective T>
-bool is(const Value& value)
+inline bool is(const Value& value)
 {
     return isType(value, T::basetype);
 }
 
+#ifndef RELEASE_UNCHECKED_CAST
+
 template <Objective T>
-T* as(const Value& value)
+inline T* as(const Value& value)
 {
     if(!value.is_obj())
         throw std::invalid_argument("value cannot be cast");
     return static_cast<T*>(value.as_obj());
 }
 
+#else
+
 template <Objective T>
-T* as(Obj* obj)
+inline T* as(const Value& value)
+{
+    return static_cast<T*>(value.as_obj());
+}
+
+#endif
+
+template <Objective T>
+inline T* as(Obj* obj)
 {
     return static_cast<T*>(obj);
 }
 
 template <Objective T>
-const T* as(const Obj* obj)
+inline const T* as(const Obj* obj)
 {
     return static_cast<const T*>(obj);
 }
 
-const string& as_string(const Value& value);
-const char* as_cstr(const Value& value);
+inline const string& as_string(const Value& value)
+{
+    return as<ObjString>(value)->str();
+}
+
+inline const char* as_cstr(const Value& value)
+{
+    return as_string(value).c_str();
+}
 
 // -----
 
@@ -249,6 +301,8 @@ std::string to_string(const ObjArray* array);
 std::string to_string(const ObjMap* map);
 
 void printValue(const Value& value);
+
+std::string type_string(const Value& value);
 
 bool objectsEqual(Obj* left, Obj* right);
 

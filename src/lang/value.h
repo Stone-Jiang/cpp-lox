@@ -12,6 +12,7 @@ class Value
     #ifdef NAN_BOXING
 
     u64 data;
+
     static constexpr u64 QNAN = 0x7ffc000000000000ULL;
     static constexpr u64 SIGN_BIT = 0x8000000000000000ULL;
     static constexpr u64 TAG_NIL = 1;
@@ -63,15 +64,16 @@ public:
     Value& operator=(double val);
     Value& operator=(bool val);
 
-    bool as_bool() const;
-    double as_number() const;
-    std::monostate as_nil() const;
-    Obj* as_obj() const;
+    inline bool as_bool() const;
+    inline double as_number() const;
+    inline std::monostate as_nil() const;
+    inline Obj* as_obj() const;
 
-    bool is_bool() const;
-    bool is_number() const;
-    bool is_nil() const;
-    bool is_obj() const;
+    inline bool is_bool() const;
+    inline bool is_number() const;
+    inline bool is_nil() const;
+    inline bool is_obj() const;
+
     size_t index() const;
     void clear();
     void swap(Value& other);
@@ -83,6 +85,133 @@ public:
 
     bool operator<(const Value& other) const;
 };
+
+#ifdef NAN_BOXING
+
+inline double Value::as_number() const
+{
+    if(!is_number())
+        throw std::runtime_error("Value::as_number: type mismatch");
+    double number;
+    memcpy(&number, &data, sizeof(double));
+    return number;
+}
+
+inline bool Value::is_number() const 
+{ 
+    return (data & QNAN) != QNAN; 
+}
+
+inline bool Value::is_nil() const 
+{ 
+    return data == NIL_VAL; 
+}
+
+inline std::monostate Value::as_nil() const
+{
+    if(!is_nil())
+        throw std::runtime_error("Value::as_nil: type mismatch");
+    return {};
+}
+
+inline bool Value::as_bool() const
+{
+    if(!is_bool())
+        throw std::runtime_error("Value::as_bool: type mismatch");
+    return data == TRUE_VAL;
+}
+
+inline bool Value::is_bool() const 
+{ 
+    return data == TRUE_VAL || data == FALSE_VAL; 
+}
+
+inline bool Value::is_obj() const
+{
+    return (data & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT);
+}
+
+inline Obj* Value::as_obj() const
+{
+    if(!is_obj())
+        throw std::runtime_error("Value::as_obj: type mismatch");
+    return reinterpret_cast<Obj*>(static_cast<uintptr_t>(data & POINTER_MASK));
+}
+
+#else
+
+template <typename T>
+inline T& Value::as()
+{
+    try 
+    {
+        return std::get<T>(data);
+    } 
+    catch(const std::bad_variant_access&) {
+        throw std::runtime_error("Variant::as: type mismatch for" + std::string(typeid(T).name()));
+    }
+}
+
+template <typename T>
+inline const T& Value::as() const
+{
+    try 
+    {
+        return std::get<T>(data);
+    } 
+    catch(const std::bad_variant_access&) 
+    {
+        throw std::runtime_error("Variant::as: type mismatch for" + std::string(typeid(T).name()));
+    }
+}
+
+template <typename T>
+inline bool Value::holds() const 
+{ 
+    return std::holds_alternative<T>(data); 
+}
+
+inline bool Value::as_bool() const 
+{ 
+    return as<bool>(); 
+}
+
+inline double Value::as_number() const 
+{ 
+    return as<double>(); 
+}
+
+inline std::monostate Value::as_nil() const 
+{ 
+    return as<std::monostate>(); 
+}
+
+inline Obj* Value::as_obj() const 
+{ 
+    return as<Obj*>(); 
+}
+
+inline bool Value::is_bool() const 
+{ 
+    return holds<bool>(); 
+}
+
+inline bool Value::is_number() const 
+{
+    return holds<double>(); 
+}
+
+inline bool Value::is_nil() const 
+{ 
+    return holds<std::monostate>(); 
+}
+
+inline bool Value::is_obj() const 
+{ 
+    return holds<Obj*>(); 
+}
+
+#endif
 
 std::string to_string(const Value& value);
 std::string to_string(const Obj* obj);

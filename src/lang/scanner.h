@@ -41,19 +41,61 @@ public:
     Token scan();
 
 private:
-    Token tok(TokenType type);
-    Token error(const string& msg);
+    inline Token tok(TokenType type);
+    inline Token error(const string& msg);
+    inline bool isAtEnd();
+    inline char advance();
+    inline char peek();
+    inline char peekNext();
+    inline bool match(char exp);
 
-    bool isAtEnd();
-    char advance();
-    char peek();
-    char peekNext();
-    bool match(char exp);
     void skip();
 
     TokenType identifierType() const;
     Token identifier();
     Token number();
     Token stringy();
-
 };
+
+inline Token Scanner::tok(TokenType type)
+{
+    return Token(type, &*start, static_cast<int>(distance(start, cur)), tokenLine);
+}
+
+inline Token Scanner::error(const string& msg)
+{
+    return Token(TokenType::ERROR, msg.c_str(), 0, tokenLine);
+}
+
+inline bool Scanner::isAtEnd()
+{
+    return cur == src.cend();
+}
+
+inline char Scanner::advance()
+{
+    return *cur++;
+}
+
+inline char Scanner::peek()
+{
+    return isAtEnd()? '\0': *cur;
+}
+
+inline char Scanner::peekNext()
+{
+    if (isAtEnd() || std::next(cur) == src.cend())
+        return '\0';
+    return *(cur+1);
+}
+
+inline bool Scanner::match(char exp)
+{
+    if(isAtEnd())
+        return false;
+    if(*cur!=exp)
+        return false;
+    
+    cur++;
+    return true;
+}

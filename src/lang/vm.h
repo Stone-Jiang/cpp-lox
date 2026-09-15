@@ -75,8 +75,36 @@ public:
     
     Result interpret(const string& src);
 
-    void push(Value val);
-    Value pop();
+    #ifndef RELEASE_UNCHECKED_STACK
+
+    inline void push(Value val)
+    {
+        if(stackTop == stack.data() + STACK_MAX)
+            throw std::overflow_error("stack overflow");
+        *stackTop++ = val;
+    }
+
+    inline Value pop()
+    {
+        if(stackTop == stack.data())
+            throw std::runtime_error("empty stack");
+        return *--stackTop;
+    }
+
+    #else
+
+    inline void push(Value val) noexcept
+    {
+        *stackTop++ = val;
+    }
+
+    inline Value pop() noexcept
+    {
+        return *--stackTop;
+    }
+
+    #endif
+
 private:
     inline u8 read_byte(CallFrame* frame)
     {
@@ -106,9 +134,36 @@ private:
 
     Result run();
 
-    size_t stackSize() const;
-    void resetStack();
-    Value peek(int dist);
+    inline size_t stackSize() const
+    {
+        return static_cast<size_t>(stackTop - stack.data());
+    }
+
+    inline void resetStack()
+    {
+        closeUpvalues(stack.data());
+        openUpvalues = nullptr;
+        frameCount = 0;
+        stackTop = stack.data();
+    }
+
+    #ifndef RELEASE_UNCHECKED_STACK
+
+    inline Value peek(int dist) const
+    {
+        if(dist < 0 || static_cast<size_t>(dist) >= stackSize())
+            throw std::overflow_error("access out of bounds");
+        return stackTop[-1 - dist];
+    }
+
+    #else
+
+    inline Value peek(int dist) const noexcept
+    {
+        return stackTop[-1 - dist];
+    }
+
+    #endif
 
     void concat();
 
@@ -141,8 +196,7 @@ private:
     Table* extensionTable(ObjType type);
     Table* extensionTable(std::string_view typeName);
     bool hasExtType(ObjType type) const;
-    bool nativeMethodExistsForExtensionType(
-        std::string_view typeName, std::string_view methodName) const;
+    bool nativeMethodExistsForExtensionType(std::string_view typeName, std::string_view methodName) const;
     bool invokeClass(ObjClass* klass, ObjString* name, int argCount);
     bool invokeSuper(ObjClass* klass, ObjString* name, int argCount);
     void defineMethod(ObjString* name, bool isStatic);

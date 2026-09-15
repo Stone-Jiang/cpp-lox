@@ -46,60 +46,7 @@ NativeResult clockNative(VM&, int, Value*)
 
 NativeResult typeNative(VM& vm, int, Value* args)
 {
-    std::string_view type;
-
-    if(args[0].is_number())
-        type = "number";
-    else if(args[0].is_nil())
-        type = "nil";
-    else if(args[0].is_bool())
-        type = "bool";
-    else
-    {
-        switch(objType(args[0]))
-        {
-        case ObjType::FUNCTION:
-        case ObjType::CLOSURE:
-        case ObjType::NATIVE:
-        case ObjType::BOUND_METHOD:
-            type = "fun";
-            break;
-        case ObjType::ERROR:
-            type = "error";
-            break;
-        case ObjType::CLASS:
-            type = "class";
-            break;
-        case ObjType::INSTANCE:
-            return NativeResult::success(Value(
-                copyString(vm, as<ObjInstance>(args[0])->klass->name->str())));
-        case ObjType::ARRAY:
-            type = "array";
-            break;
-        case ObjType::MAP:
-            type = "map";
-            break;
-        case ObjType::FILE:
-            type = "file";
-            break;
-        case ObjType::STRING:
-            type = "string";
-            break;
-        case ObjType::COMPLEX:
-            type = "complex";
-            break;
-        case ObjType::UPVALUE:
-            type = "upvalue";
-            break;
-        case ObjType::OBJ:
-            type = "obj?";
-            break;
-        case ObjType::NONE:
-            type = "none?";
-            break;
-        }
-    }
-
+    std::string_view type = type_string(args[0]);
     return NativeResult::success(Value(copyString(vm, type)));
 }
 

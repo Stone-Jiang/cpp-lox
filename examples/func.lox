@@ -1,3 +1,0 @@
-print (\x => x + 1).twice(40);
-print (\x => x + 1).thrice(40);
-print (\x => x * 2).iterate(1, 10);

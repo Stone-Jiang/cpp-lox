@@ -1,0 +1,24 @@
+var scores = Map();
+scores["Ada"] = 10;
+scores["Grace"] = 20;
+
+print scores;
+print scores["missing"];              // nil
+print scores.get_or("missing", 0);   // 0, no insertion
+print scores.get_or_set("Alan", 15); // 15, inserts
+print scores.get_or_set("Alan", 99); // 15, no overwrite
+
+print scores.keys();
+print scores.values();
+print scores.items();
+
+var additions = Map();
+additions["Ada"] = 30;
+additions["Edsger"] = 25;
+
+var merged = scores.merge(additions);
+print scores["Ada"]; // 10: merge did not mutate scores
+print merged["Ada"]; // 30: additions won the collision
+
+scores.update(additions);
+print scores["Ada"]; // 30: update mutated scores

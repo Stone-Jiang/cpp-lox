@@ -49,10 +49,7 @@ struct ArrayComparison
     const ArrayComparison* parent;
 };
 
-bool approxEqual(
-    const Value& left,
-    const Value& right,
-    const ArrayComparison* comparisonPath)
+bool approxEqual(const Value& left, const Value& right, const ArrayComparison* comparisonPath)
 {
     if(isNumeric(left) && isNumeric(right))
         return approxEqual(asComplexNumber(left), asComplexNumber(right));
@@ -258,20 +255,6 @@ Result VM::interpret(const string& src)
     return run();
 }
 
-void VM::push(Value val)
-{
-    if(stackTop == stack.data() + STACK_MAX)
-        throw std::overflow_error("stack overflow");
-    *stackTop++ = val;
-}
-
-Value VM::pop()
-{
-    if(stackTop == stack.data())
-        throw std::runtime_error("empty stack");
-    return *--stackTop;
-}
-
 Result VM::run()
 {
     auto frame = &frames[frameCount-1];
@@ -305,16 +288,19 @@ Result VM::run()
 
         case OpCode::ADD:
         {
-            if(rejectError(peek(0), "Can't use an error value in addition.") ||
-                rejectError(peek(1), "Can't use an error value in addition."))
+            if(rejectError(peek(0), "Can't use an error value in addition.") || rejectError(peek(1), "Can't use an error value in addition."))
                 return Result::RUNTIME_ERROR;
 
             if(is<ObjString>(peek(0)) && is<ObjString>(peek(1)))
                 concat();
+            else if(peek(0).is_number() && peek(1).is_number())
+            {
+                if(!binaryOp([](double a, double b) {return a+b;}))
+                    return Result::RUNTIME_ERROR;
+            }
             else if(isNumeric(peek(0)) && isNumeric(peek(1)))
             {
-                if(!complexBinaryOp([](complex<double> a,
-                                        complex<double> b) { return a+b; }))
+                if(!complexBinaryOp([](complex<double> a, complex<double> b) { return a+b; }))
                     return Result::RUNTIME_ERROR;
             }
             else
@@ -326,15 +312,30 @@ Result VM::run()
         }
         
         case OpCode::SUBTRACT:
-            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a-b;}))
+            if(peek(0).is_number() && peek(1).is_number())
+            {
+                if(!binaryOp([](double a, double b) {return a-b;}))
+                    return Result::RUNTIME_ERROR;
+            }
+            else if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a-b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::MULTIPLY:
-            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a*b;}))
+            if(peek(0).is_number() && peek(1).is_number())
+            {
+                if(!binaryOp([](double a, double b) {return a*b;}))
+                    return Result::RUNTIME_ERROR;
+            }
+            else if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a*b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::DIVIDE:
-            if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a/b;}))
+            if(peek(0).is_number() && peek(1).is_number())
+            {
+                if(!binaryOp([](double a, double b) {return a/b;}))
+                    return Result::RUNTIME_ERROR;
+            }
+            else if(!complexBinaryOp([](complex<double> a, complex<double> b) {return a/b;}))
                 return Result::RUNTIME_ERROR;
             break;
         case OpCode::GREATER:
@@ -1009,26 +1010,6 @@ Result VM::run()
         }
     }
 }
-
-size_t VM::stackSize() const
-{
-    return static_cast<size_t>(stackTop - stack.data());
-}
-
-void VM::resetStack()
-{
-    closeUpvalues(stack.data());
-    openUpvalues = nullptr;
-    frameCount = 0;
-    stackTop = stack.data();
-}
-
-Value VM::peek(int dist)
-{
-    if(dist < 0 || static_cast<size_t>(dist) >= stackSize())
-        throw std::overflow_error("access out of bounds");
-    return stackTop[-1 - dist];
-} 
 
 void VM::concat()
 {

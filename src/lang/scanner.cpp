@@ -29,14 +29,12 @@ static const std::unordered_map<string, TokenType> keywords =
     {"range",  TokenType::RANGE},
 };
 
-bool isAlpha(char c)
+static inline bool isAlpha(char c)
 {
-    return (c >= 'a' && c <= 'z') ||
-        (c >= 'A' && c <= 'Z') || 
-        c == '_' || c == '\'';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '\'';
 }
 
-bool isNumber(char c)
+static inline bool isNumber(char c)
 {
     return c >= '0' && c <= '9';
 }
@@ -99,49 +97,6 @@ Token Scanner::scan()
     }
 
     return error(std::format("Unexpected character '{}'.", c));
-}
-
-Token Scanner::tok(TokenType type)
-{
-    return Token(type, &*start, static_cast<int>(distance(start, cur)), tokenLine);
-}
-
-Token Scanner::error(const string& msg)
-{
-    return Token(TokenType::ERROR, msg.c_str(), 0, tokenLine);
-}
-
-bool Scanner::isAtEnd()
-{
-    return cur == src.cend();
-}
-
-char Scanner::advance()
-{
-    return *cur++;
-}
-
-char Scanner::peek()
-{
-    return isAtEnd()? '\0': *cur;
-}
-
-char Scanner::peekNext() 
-{
-    if (isAtEnd() || std::next(cur) == src.cend())
-        return '\0';
-    return *(cur+1);
-}
-
-bool Scanner::match(char exp)
-{
-    if(isAtEnd())
-        return false;
-    if(*cur!=exp)
-        return false;
-    
-    cur++;
-    return true;
 }
 
 void Scanner::skip()

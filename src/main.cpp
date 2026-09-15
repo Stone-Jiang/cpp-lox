@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <sstream>
 #include <iostream>
-#include "lang/vm.h"
+#include "include.h"
 
 class Runtime
 {
@@ -49,7 +49,7 @@ public:
         const auto executable = std::filesystem::absolute(path, pathError);
         if(pathError)
         {
-            std::cerr << "[library error] Could not resolve the interpreter path.\n";
+            std::cerr << "[lib error] Could not resolve the interpreter path.\n";
             return 74;  
         }
 

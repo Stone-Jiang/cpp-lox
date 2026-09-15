@@ -1,0 +1,17 @@
+var m = Map();
+
+print typeof(m);
+print m;
+print m.len;
+
+m["answer"] = 42;
+m[2] = "two";
+print m["answer"];
+print m["missing"];
+print m.len;
+print m.keys();
+print m.values();
+print m.items();
+
+print m.clear();
+print m.len;

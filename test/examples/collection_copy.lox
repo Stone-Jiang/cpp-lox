@@ -1,0 +1,37 @@
+var nested = [1];
+var original = Map();
+original["nested"] = nested;
+
+var shallow = original.copy();
+var deep = original.deep_copy();
+
+nested.push(2);
+print shallow["nested"]; // [1, 2]: shallow storage remains shared
+print deep["nested"];    // [1]: nested storage was copied
+
+deep["nested"].push(3);
+print original["nested"]; // [1, 2]
+print deep["nested"];     // [1, 3]
+
+// Repeated references remain repeated references inside the new graph.
+var repeated = [nested, nested];
+var repeated_copy = repeated.deep_copy();
+print repeated_copy[0] == repeated_copy[1]; // true
+print repeated_copy[0] == nested;           // false
+
+// Map cycles are reproduced rather than recursively expanded forever.
+var cycle = Map();
+cycle["self"] = cycle;
+var cycle_copy = cycle.deep_copy();
+print cycle_copy == cycle;              // false
+print cycle_copy["self"] == cycle_copy; // true
+
+// Cycles that cross both supported collection types are also preserved.
+var array_cycle = [];
+var map_cycle = Map();
+map_cycle["array"] = array_cycle;
+array_cycle.push(map_cycle);
+
+var array_cycle_copy = array_cycle.deep_copy();
+print array_cycle_copy == array_cycle;                  // false
+print array_cycle_copy[0]["array"] == array_cycle_copy; // true

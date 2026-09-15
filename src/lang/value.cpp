@@ -11,53 +11,14 @@ Value::Value(double num)
     memcpy(&data, &num, sizeof(double));
 }
 
-double Value::as_number() const
-{
-    if(!is_number())
-        throw std::runtime_error("Value::as_number: type mismatch");
-
-    double num;
-    memcpy(&num, &data, sizeof(double));
-    return num;
-}
-
-bool Value::is_number() const
-{
-    return (data&QNAN) != QNAN;
-}
-
 Value::Value()
 {
     data = NIL_VAL;
 }
 
-bool Value::is_nil() const
-{
-    return data==NIL_VAL;
-}
-
-std::monostate Value::as_nil() const
-{
-    if(!is_nil())
-        throw std::runtime_error("Value::as_nil: type mismatch");
-    return std::monostate{};
-}
-
 Value::Value(bool b)
 {
     data = b? TRUE_VAL: FALSE_VAL;
-}
-
-bool Value::as_bool() const
-{
-    if(!is_bool())
-        throw std::runtime_error("Value::as_bool: type mismatch");
-    return data==TRUE_VAL;
-}
-
-bool Value::is_bool() const
-{
-    return data==TRUE_VAL || data==FALSE_VAL;
 }
 
 Value::Value(Obj* obj)
@@ -67,18 +28,6 @@ Value::Value(Obj* obj)
     if((pointer & ~POINTER_MASK) != 0)
         throw std::overflow_error("Object pointer does not fit in a NaN-boxed Value");
     data = SIGN_BIT | QNAN | pointer;
-}
-
-bool Value::is_obj() const
-{
-    return  (data & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT);
-}
-
-Obj* Value::as_obj() const
-{
-    if(!is_obj())
-        throw std::runtime_error("Value::as_obj: type mismatch");
-    return (Obj*)(uintptr_t)(data & POINTER_MASK);
 }
 
 Value& Value::operator=(std::monostate)
@@ -164,69 +113,6 @@ Value& Value::operator=(bool val)
 {
     data = val;
     return *this;
-}
-
-template <typename T>
-T& Value::as() 
-{
-    try {
-        return std::get<T>(data);
-    } catch(const std::bad_variant_access& e) {
-        throw std::runtime_error("Variant::as: type mismatch for" + std::string(typeid(T).name()));
-    }
-}
-
-template <typename T>
-const T& Value::as() const
-{
-    try {
-        return std::get<T>(data);
-    } catch(const std::bad_variant_access& e) {
-        throw std::runtime_error("Variant::as: type mismatch for" + std::string(typeid(T).name()));
-    }
-}
-
-bool Value::as_bool() const
-{
-    return as<bool>();
-}
-
-double Value::as_number() const
-{
-    return as<double>();
-}
-
-std::monostate Value::as_nil() const
-{
-    return as<std::monostate>();
-}
-
-Obj* Value::as_obj() const
-{
-    return as<Obj*>();
-}
-
-template <typename T>
-bool Value::holds() const
-{
-    return std::holds_alternative<T>(data);
-}
-
-bool Value::is_bool() const
-{
-    return holds<bool>();
-}
-bool Value::is_number() const
-{
-    return holds<double>();
-}
-bool Value::is_nil() const
-{
-    return holds<std::monostate>();
-}
-bool Value::is_obj() const
-{
-    return holds<Obj*>();
 }
 
 size_t Value::index() const

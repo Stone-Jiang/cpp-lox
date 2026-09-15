@@ -50,7 +50,7 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
 COMMON_FLAGS = ["-Wall", "-Wextra", "-fdiagnostics-color=always"]
 
 # Flags applied only to the release (-O2) profile.
-RELEASE_FLAGS = ["-O2", "-fno-rtti", "-Wl,--strip-all", "-Wl,--gc-sections"]
+RELEASE_FLAGS = ["-O3", "-DNDEBUG", "-fno-rtti", "-Wl,--strip-all", "-Wl,--gc-sections", "-march=native", "-mtune=native", "-funroll-loops", "-flto=4"]
 
 # Flags applied only to the debug (-O0) profile.
 DEBUG_FLAGS = ["-O0", "-g", "-g3", "-fno-omit-frame-pointer"]
@@ -59,7 +59,7 @@ DEBUG_FLAGS = ["-O0", "-g", "-g3", "-fno-omit-frame-pointer"]
 # Preprocessor macros - plain names (no -D), written like you'd use them in
 # an #ifdef. Each is passed to the compiler as -D<MACRO>.
 # ---------------------------------------------------------------------------
-RELEASE_MACROS = []
+RELEASE_MACROS = ["RELEASE_UNCHECKED_STACK", "RELEASE_UNCHECKED_CAST"]
 
 DEBUG_MACROS = ["DEBUG_TRACE_EXECUTION", "DEBUG_PRINT_CODE", "DEBUG_LOG_GC", "DEBUG_VALUE_TABLE"]
 

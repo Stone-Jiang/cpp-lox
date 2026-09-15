@@ -1,0 +1,6 @@
+fun twice(fn, value) {
+    return fn(fn(value));
+}
+
+extend "function" "twice" twice;
+print (\x => x + 1).twice(40);

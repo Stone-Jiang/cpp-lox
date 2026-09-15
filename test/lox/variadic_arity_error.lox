@@ -1,0 +1,5 @@
+fun needsTwo(first, second, rest...) {
+    return rest;
+}
+
+needsTwo(1);

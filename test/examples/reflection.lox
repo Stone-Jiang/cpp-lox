@@ -1,0 +1,11 @@
+class A {}
+class B < A {}
+class C < B {}
+class D < A {}
+class E {}
+
+var b = B();
+
+print B.superclass();
+print E.superclass();
+print C. superclasses();

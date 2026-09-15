@@ -93,41 +93,6 @@ void Compiler::markCompilerRoots(VM& vm)
     }
 }
 
-void Compiler::advance()
-{
-    parser.prev = parser.cur;
-    while(true)
-    {
-        parser.cur = scanner->scan();
-        if(parser.cur.type != TokenType::ERROR)
-            break;
-        errorAtCur(parser.cur.start);
-    }
-}
-
-void Compiler::consume(TokenType type, const string& msg)
-{
-    if(parser.cur.type == type)
-    {
-        advance();
-        return;
-    }
-    errorAtCur(msg);
-}
-
-bool Compiler::check(TokenType type)
-{
-    return parser.cur.type == type;
-}
-
-bool Compiler::match(TokenType type)
-{
-    if(!check(type))
-        return false;
-    advance();
-    return true;
-}
-
 void Compiler::errorAt(Token& token, const string& msg)
 {
     if(parser.panic)
@@ -167,22 +132,11 @@ ObjFunction* Compiler::end()
     #ifdef DEBUG_PRINT_CODE
     if(!parser.hadError)
         Debug::disassembleChunk(*currentChunk(),
-            func->name != nullptr ? func->name->str() : "<script>");
+            func->name != nullptr? func->name->str() : "<script>");
     #endif
 
     current = current->enclosing;
     return func;
-}
-
-void Compiler::emit(u8 byte)
-{
-    currentChunk()->write(byte, parser.prev.line);
-}
-
-void Compiler::emit(u8 byte1, u8 byte2)
-{
-    emit(byte1);
-    emit(byte2);
 }
 
 void Compiler::number(bool)
