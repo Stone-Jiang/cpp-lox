@@ -15,21 +15,23 @@ enum Op: u8
     PRINT, ASSERT, JUMP, JUMP_IF_FALSE, LOOP, 
     CALL,INVOKE, SUPER_INVOKE,
     CLOSURE, CLOSE_UPVALUE, RETURN, FAIL,
-    CLASS, INHERIT, METHOD, STATIC_METHOD,
-    MAKE_ARRAY, GET_INDEX, SET_INDEX, EXTEND, ITER_SNAP, NESTED_CLASS,
+    CLASS, INHERIT, METHOD, STATIC_METHOD, NESTED_CLASS, 
+    MAKE_ARRAY, GET_INDEX, SET_INDEX, EXTEND, ITER_SNAP, 
+    REPL_RESULT,
 };
 }
-
 
 class Chunk
 {
     friend class Debug;
     friend class VM;
     friend class Compiler;
+
 private: 
     Vector<u8> code;
     Vector<int> lines;
     ValueArray constants;
+    
 public:
     explicit Chunk(VM* owner = nullptr): code(owner), lines(owner), constants(owner) {}
     ~Chunk() = default;

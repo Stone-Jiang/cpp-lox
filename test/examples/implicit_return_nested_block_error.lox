@@ -1,0 +1,7 @@
+// A tail expression is only implicit at the function body's direct scope.
+// expect compile error: Expect ';' after expression.
+fun invalidNestedTail() {
+    {
+        42
+    }
+}

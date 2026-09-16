@@ -52,8 +52,10 @@ Compiler::Compiler(VM& vm, FunctionType type): enclosing(current), owner(&vm), f
     }
 }
 
-ObjFunction* Compiler::compile(VM& vm, const string& src)
+ObjFunction* Compiler::compile(VM& vm, const string& src, bool repl)
 {
+    this->repl = repl;
+
     enclosing = nullptr;
     owner = &vm;
     ftype = FunctionType::SCRIPT;
@@ -73,10 +75,10 @@ ObjFunction* Compiler::compile(VM& vm, const string& src)
 
     parser = Parser{};
     this->chunk = &func->chunk;
-    scanner = std::make_unique<Scanner>(src);
+    scanner = std::make_unique<Scanner>(src, repl);
     
     advance();
-    while(!match(TokenType::TEOF))
+    while(!isAtEnd())
         declaration();
 
     auto res = end();
@@ -101,7 +103,7 @@ void Compiler::errorAt(Token& token, const string& msg)
 
     std::cerr<<"[compile error] line "<<token.line;
 
-    if(token.type == TokenType::TEOF)
+    if(token.type == TokenType::TEOF || token.type == TokenType::REPL_EOF)
         std::cerr<<" at end";
     else if(token.type != TokenType::ERROR && token.start != nullptr && token.len > 0)
     {
@@ -407,7 +409,7 @@ void Compiler::varDecl()
     else
         emit(OpCode::NIL);
     
-    consume(TokenType::SEMICOLON, "Expect ';' after variable decl.");
+    consumeEnd("Expect ';' after variable decl.");
     defineVar(global);
 }
 
@@ -538,8 +540,37 @@ void Compiler::funDecl()
 void Compiler::expressionStmt()
 {
     expression();
-    consume(TokenType::SEMICOLON, "Expect ';' after expression.");
-    emit(OpCode::POP_UNHANDLED);
+
+    bool flag = 
+        current->ftype == FunctionType::INIT &&
+        current->scopeDepth == 1 &&
+        check(TokenType::RIGHT_BRACE);
+
+    if(flag)
+    {
+        error("Cannot make implicit returns from initializer.");
+        emit(OpCode::POP_UNHANDLED);
+        return;
+    }
+
+    flag = 
+        current->ftype != FunctionType::SCRIPT &&
+        current->ftype != FunctionType::INIT &&
+        current->scopeDepth == 1 &&
+        check(TokenType::RIGHT_BRACE);
+
+    if(flag)
+    {
+        emit(OpCode::RETURN);
+        return;
+    }
+
+    bool semicolon = consumeEnd("Expect ';' after expression.");
+
+    if(current->repl && !semicolon)
+        emit(OpCode::REPL_RESULT);
+    else
+        emit(OpCode::POP_UNHANDLED);
 }
 
 void Compiler::failStmt()
@@ -646,14 +677,14 @@ void Compiler::ifStmt()
 void Compiler::printStmt()
 {
     expression();
-    consume(TokenType::SEMICOLON, "Expect ';' after printed value.");
+    consumeEnd("Expect ';' after printed value.");
     emit(OpCode::PRINT);
 }
 
 void Compiler::assertStmt()
 {
     expression();
-    consume(TokenType::SEMICOLON, "Expect ';' after assertion value");
+    consumeEnd("Expect ';' after assertion value");
     emit(OpCode::ASSERT);
 }
 
@@ -1245,7 +1276,7 @@ void Compiler::extendStmt()
         static_cast<size_t>(parser.prev.len - 2)))));
 
     expression();
-    consume(TokenType::SEMICOLON, "Expect ';' after extension declaration.");
+    consumeEnd("Expect ';' after extension declaration.");
     emit(OpCode::EXTEND);
 }
 

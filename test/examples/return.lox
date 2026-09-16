@@ -1,0 +1,81 @@
+// A direct expression at the end of a function is returned.
+fun implicitNumber() {
+    42
+}
+
+fun square(x) {
+    return x*x;
+}
+
+// An explicit return continues to behave identically.
+fun explicitNumber() {
+    return 42;
+}
+
+// A semicolon suppresses the implicit return.
+fun discardedNumber() {
+    42;
+}
+
+// Empty functions still return nil.
+fun empty() {}
+
+// Assignments are expressions and return the assigned value.
+fun assignment() {
+    var value = 1;
+    value = 7
+}
+
+// Earlier statements and nested completed blocks do not interfere with the
+// direct tail expression.
+fun afterNestedBlock() {
+    {
+        var ignored = 10;
+    }
+    "after-block"
+}
+
+// Control flow may reach a later tail expression or return early.
+fun earlyOrTail(flag) {
+    if (flag) return "early";
+    "tail"
+}
+
+// Returned closures must retain captured locals after the function exits.
+fun makeClosure() {
+    var captured = "captured";
+    \() => captured
+}
+
+// Object results must survive stack cleanup and garbage collection.
+fun makeArray() {
+    [1, 2, 3]
+}
+
+class Box {
+    init(value) {
+        this.data = value;
+    }
+
+    read() {
+        this.data
+    }
+
+    static answer() {
+        42
+    }
+}
+
+print implicitNumber();       // expect: 42
+print square(3);             // expect: 9
+print explicitNumber();       // expect: 42
+print discardedNumber();      // expect: nil
+print empty();                // expect: nil
+print assignment();           // expect: 7
+print afterNestedBlock();      // expect: after-block
+print earlyOrTail(true);      // expect: early
+print earlyOrTail(false);     // expect: tail
+print makeClosure()();        // expect: captured
+print makeArray();            // expect: [1, 2, 3]
+print Box(9).read();           // expect: 9
+print Box.answer();            // expect: 42

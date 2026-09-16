@@ -56,29 +56,32 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
         case OpCode::GET_SUPER:
             return constantInstruction("OpCode::GET_SUPER", chunk, offset);
         case OpCode::EQUAL:
-        return simpleInstruction("OpCode::EQUAL", offset);
-            case OpCode::GREATER:
-        return simpleInstruction("OpCode::GREATER", offset);
-            case OpCode::LESS:
-        return simpleInstruction("OpCode::LESS", offset);
-            case OpCode::ADD:
-        return simpleInstruction("OpCode::ADD", offset);
-            case OpCode::SUBTRACT:
-        return simpleInstruction("OpCode::SUBTRACT", offset);
-            case OpCode::MULTIPLY:
-        return simpleInstruction("OpCode::MULTIPLY", offset);
-            case OpCode::DIVIDE:
-        return simpleInstruction("OpCode::DIVIDE", offset);
-            case OpCode::NOT:
-        return simpleInstruction("OpCode::NOT", offset);
+            return simpleInstruction("OpCode::EQUAL", offset);
+        case OpCode::GREATER:
+                return simpleInstruction("OpCode::GREATER", offset);
+        case OpCode::LESS:
+            return simpleInstruction("OpCode::LESS", offset);
+        case OpCode::ADD:
+            return simpleInstruction("OpCode::ADD", offset);
+        case OpCode::SUBTRACT:
+            return simpleInstruction("OpCode::SUBTRACT", offset);
+        case OpCode::MULTIPLY:
+            return simpleInstruction("OpCode::MULTIPLY", offset);
+        case OpCode::DIVIDE:
+            return simpleInstruction("OpCode::DIVIDE", offset);
+        case OpCode::NOT:
+            return simpleInstruction("OpCode::NOT", offset);
         case OpCode::NEGATE:
-        return simpleInstruction("OpCode::NEGATE", offset);
-        case OpCode::IS_ERROR:
-            return simpleInstruction("OpCode::IS_ERROR", offset);
-
+            return simpleInstruction("OpCode::NEGATE", offset);
         case OpCode::PRINT:
             return simpleInstruction("OpCode::PRINT", offset);
-
+        case OpCode::ASSERT:
+            return simpleInstruction("OpCode::ASSERT", offset);
+        case OpCode::IS_ERROR:
+            return simpleInstruction("OpCode::IS_ERROR", offset);
+        case OpCode::REPL_RESULT:
+            return simpleInstruction("OpCode::REPL_RESULT", offset);
+        
         case OpCode::JUMP:
             return jumpInstruction("OpCode::JUMP", 1, chunk, offset);
         case OpCode::JUMP_IF_FALSE:

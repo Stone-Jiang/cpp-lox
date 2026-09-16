@@ -72,8 +72,9 @@ public:
     VM& operator=(const VM&) = delete;
 
     ObjString* initStr = nullptr;
+    ObjString* ansStr = nullptr;
     
-    Result interpret(const string& src);
+    Result interpret(const string& src, bool repl = false);
 
     #ifndef RELEASE_UNCHECKED_STACK
 

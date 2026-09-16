@@ -1,0 +1,7 @@
+// Initializers may not implicitly return a value.
+// expect compile error: An initializer can't implicitly return a value.
+class InvalidInitializer {
+    init() {
+        42
+    }
+}

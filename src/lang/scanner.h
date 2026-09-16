@@ -15,7 +15,7 @@ enum class TokenType: u8
     CLASS, THIS, SUPER, STATIC,
     BREAK, CONTINUE, EXTEND,
     RIGHT_ARROW,
-    TEOF, ERROR, REPL_EOF,
+    REPL_EOF, TEOF, ERROR, 
 };
 
 struct Token

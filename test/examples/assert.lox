@@ -1,1 +1,10 @@
-assert 1==2;
+class A {
+
+}
+
+class B < A {
+
+}
+
+var b = B();
+print b.cls;

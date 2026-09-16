@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <sstream>
 #include <iostream>
-#include "include.h"
+#include "lang/vm.h"
 
 class Runtime
 {
@@ -18,7 +18,7 @@ public:
         std::stringstream buf;
         buf<<file.rdbuf();
 
-        auto result = vm.interpret(buf.str());
+        auto result = vm.interpret(buf.str(), false);
         if(result==Result::COMPILE_ERROR)
             return 65;
         if(result==Result::RUNTIME_ERROR)
@@ -36,7 +36,7 @@ public:
                 break;
             if(line.substr(0,2)=="-q")
                 break;
-            vm.interpret(line);
+            vm.interpret(line, true);
         }
         return 0;
     }

@@ -38,7 +38,7 @@ The release executable is named `main`, and the debug executable is named `debug
 - `VM`, `Compiler`, and `Scanner` are not global variables or singletons, leaving space for extensions in the future.
 - Replaced messages and string handling with `std::string` and `std::string_view`, which provides simpler and more readable memory management with low cost.
 - Added a `to_string` layer to printing in Lox, which can be more easily extended, pipelined, and integrated with other components.
-- Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal cyan, though not really harmful.
+- Added colors in debug mode. In debug mode, **please use `-q` to quit!** Using `ctrl c` or other OS level exit might make your terminal colored, though not really harmful. If you're using a separate terminal, disregard this.
 
 ## Configurable value and table implementations
 
@@ -683,6 +683,65 @@ value.method(a, b)
 
 Extension sugar currently applies to direct calls. Merely reading an extension, such as `var method = value.method;`, does not create a bound function.
 
+## REPL behavior
+
+Starting the executable without a source path opens a persistent, line-oriented REPL with the `>> ` prompt. Each input line is compiled separately, but globals, functions, classes, and other reachable values remain available to later lines.
+
+At the end of a REPL line, semicolons are optional for variable declarations, expression statements, `print`, `assert`, and `extend`. A bare expression without a semicolon has additional result behavior: its value is printed automatically and assigned to the global variable `ans`.
+
+```
+>> 2 + 3
+5
+>> ans * 4
+20
+>> var scale = 10
+>> scale + ans
+30
+```
+
+Here the second expression updates `ans` from `5` to `20`, so the final result is `10 + 20`. `ans` initially contains `nil`. Adding a semicolon suppresses automatic printing and leaves `ans` unchanged:
+
+```
+>> 1 + 1;
+>> ans
+30
+```
+
+`ans` can be written to by lines like `ans=30`, but it will redirect to the last answer by entering another line.
+
+The terminal REPL reads one physical line at a time and does not continue incomplete input onto later lines. Multi-statement blocks and declarations therefore need to fit on one line. Enter a line beginning with `-q` or send end-of-file to exit. *Top-level code executed from a file retains the normal semicolon requirements and does not automatically print or assign expression results.*
+
+## Function tail returns
+
+A function, instance method, or static method may omit both `return` and the terminating semicolon from an expression placed directly at the end of its body. That expression becomes the function's return value. Lambdas already return their single expression directly and do not use a braced body.
+
+```
+fun square(x) {
+  x * x
+}
+
+var add = \(a, b) => a + b;
+
+class Greeting {
+  message(name) {
+    "Hello, " + name
+  }
+
+  static defaultName() {
+    "Lox"
+  }
+}
+
+print square(5);                  // 25
+print add(2, 3);                  // 5
+print Greeting().message("Ada"); // Hello, Ada
+print Greeting.defaultName();     // Lox
+```
+
+The tail expression must be in the function body's outermost scope and immediately precede its closing `}`. A semicolon changes it back into an ordinary expression statement, after which normal implicit return behavior applies (`nil` for ordinary functions and methods).
+
+Initializers cannot use a tail expression because they implicitly return `this`; use an ordinary semicolon-terminated expression or an explicit bare `return;` instead. Explicit `return value;` continues to work normally in non-initializer functions.
+
 # Playground
 
 The local web playground provides a source editor, program output, and a persistent REPL. It uses the existing Craft executable, so build the project before starting the playground.
@@ -704,6 +763,8 @@ Then open <http://127.0.0.1:8765> in a browser.
 5. Read the program output and exit status in the right pane.
 
 ### Using the REPL
+
+The playground drives the same persistent, line-oriented REPL, including optional final semicolons, automatic bare-expression output, and the `ans` variable described above.
 
 1. Select the **REPL** tab in the right pane.
 2. Enter a Craft expression or statement and select **Send**.

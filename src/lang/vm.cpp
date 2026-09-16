@@ -12,12 +12,12 @@ using std::complex;
 
 namespace
 {
-bool isNumeric(const Value& value)
+inline bool isNumeric(const Value& value)
 {
     return value.is_number() || is<ObjComplex>(value);
 }
 
-bool isFalsy(Value value)
+inline bool isFalsy(Value value)
 {
     return value.is_nil() || (value.is_bool() && !value.as_bool());
 }
@@ -209,13 +209,15 @@ public:
     TempRootGuard& operator=(const TempRootGuard& other) = delete;
 };
 
-VM::VM():globals(this), strings(this), grayStack(this),
+VM::VM(): globals(this), strings(this), grayStack(this),
     arrayExt(this), stringExt(this), mapExt(this), functionExt(this)
 {
     const auto natives = nativeDefinitions();
     globals.reserve(natives.size());
 
     initStr = copyString(*this, "init");
+    ansStr = copyString(*this, "ans");
+    globals.set(ansStr, Value());
 
     for(const auto& nat: natives)
         defineNative(nat);
@@ -236,13 +238,13 @@ VM::~VM()
     freeObjs();
 }
 
-Result VM::interpret(const string& src)
+Result VM::interpret(const string& src, bool repl)
 {
     gcEnabled = true;
 
     resetStack();
 
-    auto* func = Compiler::comp.compile(*this, src);
+    auto* func = Compiler::comp.compile(*this, src, repl);
     if(func == nullptr)
         return Result::COMPILE_ERROR;
 
@@ -1079,12 +1081,20 @@ Result VM::run()
             }
             break;
         }
+        case OpCode::REPL_RESULT:
+        {
+            if(rejectError(peek(0), "Unhandled error result."))
+                return Result::RUNTIME_ERROR;
+            globals.set(ansStr, peek(0));
+            printValue(peek(0));
+            std::printf("\n");
+            pop();
+            break;
+        }
 
-        #ifndef RELEASE_UNCHECKED_CASES
         default:
             runtimeError("Unknown opcode {}.", instruction);
             return Result::RUNTIME_ERROR;
-        #endif
         }
     }
 }
@@ -1955,6 +1965,7 @@ void VM::markRoots()
 
     markObject(temporaryRoot);
     markObject(initStr);
+    markObject(ansStr);
     
     markTable(globals);
     markTable(arrayExt);

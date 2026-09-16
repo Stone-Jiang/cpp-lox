@@ -117,6 +117,8 @@ private:
     ObjFunction* func = nullptr;
     FunctionType ftype;
 
+    bool repl = false;
+
     Compiler(): ftype(FunctionType::SCRIPT) {}
 
     Compiler(VM& vm, FunctionType type);
@@ -133,11 +135,16 @@ public:
     Compiler(Compiler& other) = delete;
     Compiler& operator=(Compiler& other) = delete;
 
-    ObjFunction* compile(VM& vm, const std::string& src);
+    ObjFunction* compile(VM& vm, const std::string& src, bool repl = false);
 
     void markCompilerRoots(VM& vm);
 
 private:
+    inline bool isAtEnd() const
+    {
+        return check(TokenType::TEOF) || check(TokenType::REPL_EOF);
+    }
+
     inline void advance()
     {
         parser.prev = parser.cur;
@@ -160,7 +167,18 @@ private:
         errorAtCur(msg);
     }
 
-    inline bool check(TokenType type)
+    inline bool consumeEnd(const std::string& msg)
+    {
+        if(match(TokenType::SEMICOLON))
+            return true;
+        if(current->repl && check(TokenType::REPL_EOF)) 
+            return false;
+        
+        errorAtCur(msg);
+        return false;
+    }
+
+    inline bool check(TokenType type) const
     {
         return parser.cur.type == type;
     }
