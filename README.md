@@ -58,7 +58,6 @@ Adding a native therefore does not require modifying the VM's call dispatch: def
 
 - Supplying one path runs that source file directly.
 - Starting the executable without arguments opens a persistent REPL.
-- Inside the terminal REPL, `-r path/to/file.lox` runs a file using the current VM instance.
 - Inside the terminal REPL, enter `-q` to quit.
 
 ## Notable points
@@ -147,6 +146,23 @@ class Counter {
 ```
 
 Static methods participate in inherited member lookup. Instance methods remain bound to a receiver, and the compiler rejects `this` or `super` in static context. Class members can be replaced at runtime, for example `Counter.create = anotherFunction`.
+
+Classes may be nested with either `class` or `static class`; both spellings define the inner class as a static member of the enclosing class:
+
+```lox
+class Outer {
+  class Base {}
+
+  static class Child < Outer.Base {
+    class Deep {}
+  }
+}
+
+print Outer.Child;
+print Outer.Child.Deep;
+```
+
+Nested subclasses support `super`, and superclass names may be qualified member paths such as `Outer.Base`. Nested classes do not introduce an unqualified lexical variable: access them through their enclosing class. Built-in class reflection names are reserved, and duplicate names within one class body are compile errors.
 
 ## Native functions
 
@@ -610,8 +626,12 @@ Class reflection:
 | `Class.superclass` | Direct superclass, or `nil` | Does not search beyond the immediate parent |
 | `Class.superclasses()` | New array of classes | Returns `[Class, direct superclass, ...]` through the root class |
 | `Class.has_method(name)` | Boolean | Tests for a non-static method, including inherited methods |
-| `Class.has_static(name)` | Boolean | Tests for a static method, including inherited methods |
-| `Class.all_method_names()` | New map from names to booleans | Reports members declared directly on `Class`; `false` means instance method and `true` means static |
+| `Class.has_static(name)` | Boolean | Tests for a callable static method, including inherited methods |
+| `Class.get_static(name)` | Function | Returns an inherited or directly declared callable static method without binding a receiver |
+| `Class.has_member(name)` | Boolean | Tests for any static member, including nested classes and inherited members |
+| `Class.get_member(name)` | Stored value | Returns a static member; missing names produce `NAME` and instance members produce `TYPE` errors |
+| `Class.all_method_names()` | New map from names to booleans | Reports callable members declared directly on `Class`; `false` means instance method and `true` means static |
+| `Class.all_member_names()` | New map from names to booleans | Reports every member declared directly on `Class`, including nested classes and static data |
 
 Reflection names must be strings, and relationship arguments must be classes; invalid argument types produce `TYPE` errors. Class member traversal and instance field traversal use hash tables, so the order of returned names is unspecified. Currently, class reflections are mostly inspections.
 
@@ -628,7 +648,7 @@ value.set_field("answer", 42);
 print value.get_field("answer");  // 42
 print value.has_method("greet");  // true
 print Child.has_static("create"); // true
-print Child.superclass() == Base;  // true
+print Child.superclass == Base;    // true
 ```
 
 ## Script extension methods

@@ -140,6 +140,8 @@ int Debug::disassembleInstruction(Chunk& chunk, int offset)
             return simpleInstruction("OpCode::EXTEND", offset);
         case OpCode::ITER_SNAP:
             return byteInstruction("OpCode::ITER_SNAP", chunk, offset);
+        case OpCode::NESTED_CLASS:
+            return nestedClassInstruction(chunk, offset);
         default:
             printf("Unknown opcode %d\n", ins);
             return offset + 1;
@@ -189,5 +191,15 @@ int Debug::jumpInstruction(const string& name, int sign, Chunk& chunk, int offse
     jump |= chunk.code[offset+2];
     printf("%-16s %4d -> %d\n", name.c_str(), offset,
             offset + 3 + sign * jump);
+    return offset + 3;
+}
+
+int Debug::nestedClassInstruction(Chunk& chunk, int offset)
+{
+    const u8 constant = chunk.code[offset+1];
+    const u8 hasSuper = chunk.code[offset+2];
+    printf("%-24s %4d '", "NESTED_CLASS", constant);
+    printValue(chunk.constants[constant]);
+    printf("' superclass=%s\n", hasSuper ? "yes" : "no");
     return offset + 3;
 }

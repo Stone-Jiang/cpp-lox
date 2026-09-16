@@ -1,0 +1,33 @@
+class Root {
+    say() { return "root"; }
+}
+
+class Outer {
+    class Base < Root {}
+
+    static class Inner < Outer.Base {
+        say() { return super.say() + "-inner"; }
+        static answer() { return 42; }
+
+        class Deep {}
+    }
+}
+
+class QualifiedChild < Outer.Base {}
+
+print Outer.Inner;
+print Outer.Inner();
+print Outer.Inner().say();
+print Outer.Inner.answer();
+print Outer.Inner.Deep;
+print Outer.Inner.Deep();
+print Outer.has_member("Inner");
+print Outer.has_static("Inner");
+print Outer.get_member("Inner") == Outer.Inner;
+print Outer.Inner.has_static("answer");
+print QualifiedChild().say();
+Outer.extra = 7;
+print Outer.has_member("extra");
+print Outer.get_member("extra");
+print Outer.all_member_names()["Inner"];
+print Outer.all_method_names()["Inner"] == nil;

@@ -16,6 +16,12 @@ bool findClassMember(ObjClass* klass, ObjString* name, ClassMember& member)
     return false;
 }
 
+bool isFunctionLike(Value value)
+{
+    return is<ObjClosure>(value) ||
+        is<ObjNative>(value) ||
+        is<ObjBoundMethod>(value);
+}
 
 NativeResult insClass(VM&, Value receiver)
 {
@@ -299,7 +305,8 @@ NativeResult clsHasStatic(VM&, Value receiver, int, Value* args)
 
     auto cls = as<ObjClass>(receiver);
     ClassMember value;
-    if(findClassMember(cls, as<ObjString>(args[0]), value) && value.isStatic)
+    if(findClassMember(cls, as<ObjString>(args[0]), value) &&
+        value.isStatic && isFunctionLike(value.value))
         return NativeResult::success(Value(true));
     else
         return NativeResult::success(Value(false));
@@ -324,13 +331,59 @@ NativeResult clsGetStatic(VM&, Value receiver, int, Value* args)
         return NativeResult::failure(ErrorKind::TYPE_ERROR, std::format("'{}' is an instance method, not a static method.", name->str()), receiver);
     }
 
-    if(!is<ObjClosure>(member.value) && !is<ObjNative>(member.value) && !is<ObjBoundMethod>(member.value))
+    if(!isFunctionLike(member.value))
     {
         return NativeResult::failure(ErrorKind::TYPE_ERROR,std::format("Static member '{}' is not callable.", name->str()),receiver);
     }
 
     // Static methods do not receive a class or instance receiver. Their
     // closure already retains any lexical upvalues it needs.
+    return NativeResult::success(member.value);
+}
+
+NativeResult clsHasMember(VM&, Value receiver, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(
+            ErrorKind::TYPE_ERROR,
+            "has_member() expects a string name.");
+
+    ClassMember member;
+    const bool found = findClassMember(
+        as<ObjClass>(receiver),
+        as<ObjString>(args[0]),
+        member);
+    return NativeResult::success(Value(found && member.isStatic));
+}
+
+NativeResult clsGetMember(VM&, Value receiver, int, Value* args)
+{
+    if(!is<ObjString>(args[0]))
+        return NativeResult::failure(
+            ErrorKind::TYPE_ERROR,
+            "get_member() expects a string name.");
+
+    auto* cls = as<ObjClass>(receiver);
+    auto* name = as<ObjString>(args[0]);
+    ClassMember member;
+
+    if(!findClassMember(cls, name, member))
+    {
+        return NativeResult::failure(
+            ErrorKind::NAME_ERROR,
+            std::format("Class '{}' has no member named '{}'.",
+                cls->name->str(), name->str()),
+            receiver);
+    }
+
+    if(!member.isStatic)
+    {
+        return NativeResult::failure(
+            ErrorKind::TYPE_ERROR,
+            std::format("Member '{}' is an instance member.", name->str()),
+            receiver);
+    }
+
     return NativeResult::success(member.value);
 }
 
@@ -345,7 +398,8 @@ NativeResult clsAllMethodNames(VM& vm, Value receiver, int, Value*)
     {
         dest->vt.reserve(table.size());
         table.foreach([dest](ObjString* key, ClassMember val){
-            dest->vt.set(Value(key), Value(val.isStatic));
+            if(isFunctionLike(val.value))
+                dest->vt.set(Value(key), Value(val.isStatic));
         });
     }
     catch(const std::bad_alloc&)
@@ -362,6 +416,43 @@ NativeResult clsAllMethodNames(VM& vm, Value receiver, int, Value*)
     {
         vm.pop();
         return NativeResult::failure(ErrorKind::TYPE_ERROR, error.what(), Value());
+    }
+
+    vm.pop();
+    return NativeResult::success(Value(dest));
+}
+
+NativeResult clsAllMemberNames(VM& vm, Value receiver, int, Value*)
+{
+    auto* cls = as<ObjClass>(receiver);
+    auto* dest = makeObj<ObjMap>(vm);
+    vm.push(Value(dest));
+
+    try
+    {
+        dest->vt.reserve(cls->members.size());
+        cls->members.foreach([dest](ObjString* key, ClassMember member) {
+            dest->vt.set(Value(key), Value(member.isStatic));
+        });
+    }
+    catch(const std::bad_alloc&)
+    {
+        vm.pop();
+        return NativeResult::failure(
+            ErrorKind::CRITICAL_ERROR,
+            "Not enough memory to collect class member names.");
+    }
+    catch(const std::length_error&)
+    {
+        vm.pop();
+        return NativeResult::failure(
+            ErrorKind::CRITICAL_ERROR,
+            "Class has too many members to collect.");
+    }
+    catch(const std::invalid_argument& error)
+    {
+        vm.pop();
+        return NativeResult::failure(ErrorKind::TYPE_ERROR, error.what());
     }
 
     vm.pop();
@@ -400,7 +491,10 @@ constexpr std::array classMethods {
     NativeMethodDef{"has_method", 1, clsHasMethod},
     NativeMethodDef{"has_static", 1, clsHasStatic},
     NativeMethodDef{"get_static", 1, clsGetStatic},
+    NativeMethodDef{"has_member", 1, clsHasMember},
+    NativeMethodDef{"get_member", 1, clsGetMember},
     NativeMethodDef{"all_method_names", 0, clsAllMethodNames},
+    NativeMethodDef{"all_member_names", 0, clsAllMemberNames},
 
 };
 

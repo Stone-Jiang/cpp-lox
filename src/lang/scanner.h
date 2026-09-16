@@ -11,11 +11,11 @@ enum class TokenType: u8
     IDENTIFIER, STRING, NUMBER, IMAGINARY,
     AND, OR, TRUE, FALSE, NIL,
     FOR, WHILE, IF, ELSE, VAR, RANGE,
-    FUN, RETURN, FAIL, PRINT, BACKSLASH,
+    FUN, RETURN, FAIL, PRINT, BACKSLASH, ASSERT,
     CLASS, THIS, SUPER, STATIC,
     BREAK, CONTINUE, EXTEND,
     RIGHT_ARROW,
-    TEOF, ERROR
+    TEOF, ERROR, REPL_EOF,
 };
 
 struct Token
@@ -35,19 +35,56 @@ class Scanner
     int line = 1;
     int tokenLine = 1;
     string::const_iterator start, cur;
+    bool repl = false;
 public:
-    Scanner(const string& str);
+    Scanner(const string& str, bool repl = false);
 
     Token scan();
 
 private:
-    inline Token tok(TokenType type);
-    inline Token error(const string& msg);
-    inline bool isAtEnd();
-    inline char advance();
-    inline char peek();
-    inline char peekNext();
-    inline bool match(char exp);
+    inline Token tok(TokenType type)
+    {
+        return Token(type, &*start, static_cast<int>(distance(start, cur)), tokenLine);
+    }
+
+    inline Token error(const string& msg)
+    {
+        return Token(TokenType::ERROR, msg.c_str(), 0, tokenLine);
+    }
+
+    inline bool isAtEnd()
+    {
+        
+    return cur == src.cend();
+    }
+
+    inline char advance()
+    {
+        return *cur++;
+    }
+
+    inline char peek()
+    {
+        return isAtEnd()? '\0': *cur;
+    }
+
+    inline char peekNext()
+    {
+        if (isAtEnd() || std::next(cur) == src.cend())
+            return '\0';
+        return *(cur+1);
+    }
+
+    inline bool match(char exp)
+    {
+        if(isAtEnd())
+            return false;
+        if(*cur!=exp)
+            return false;
+        
+        cur++;
+        return true;
+    }
 
     void skip();
 
@@ -56,46 +93,3 @@ private:
     Token number();
     Token stringy();
 };
-
-inline Token Scanner::tok(TokenType type)
-{
-    return Token(type, &*start, static_cast<int>(distance(start, cur)), tokenLine);
-}
-
-inline Token Scanner::error(const string& msg)
-{
-    return Token(TokenType::ERROR, msg.c_str(), 0, tokenLine);
-}
-
-inline bool Scanner::isAtEnd()
-{
-    return cur == src.cend();
-}
-
-inline char Scanner::advance()
-{
-    return *cur++;
-}
-
-inline char Scanner::peek()
-{
-    return isAtEnd()? '\0': *cur;
-}
-
-inline char Scanner::peekNext()
-{
-    if (isAtEnd() || std::next(cur) == src.cend())
-        return '\0';
-    return *(cur+1);
-}
-
-inline bool Scanner::match(char exp)
-{
-    if(isAtEnd())
-        return false;
-    if(*cur!=exp)
-        return false;
-    
-    cur++;
-    return true;
-}

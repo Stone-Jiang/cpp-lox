@@ -201,6 +201,10 @@ void Compiler::statement()
     {
         printStmt();
     }
+    else if(match(TokenType::ASSERT))
+    {
+        assertStmt();
+    }
     else if(match(TokenType::EXTEND))
     {
         extendStmt();
@@ -473,6 +477,7 @@ void Compiler::function_(FunctionType type)
 void Compiler::method(bool isStatic)
 {
     consume(TokenType::IDENTIFIER, "Expect method name.");
+    declareClassMember(parser.prev);
     u8 constant = identConstant(parser.prev);
 
     FunctionType type = isStatic ? FunctionType::STATIC_METHOD : FunctionType::METHOD;
@@ -501,10 +506,7 @@ void Compiler::classDecl()
 
     if(match(TokenType::LESS))
     {
-        consume(TokenType::IDENTIFIER, "Expect superclass name.");
-        variable(false);
-        if(identifiersEqual(classname, parser.prev))
-            error("A class can't inherit from itself.");
+        superclass(classname);
         beginScope();
         addLocal(syntheticToken("super"));
         defineVar(0);
@@ -516,7 +518,7 @@ void Compiler::classDecl()
     namedVariable(classname, false);
     consume(TokenType::LEFT_BRACE, "Expect '{' before class body.");
     while(!check(TokenType::RIGHT_BRACE) && !check(TokenType::TEOF))
-        method(match(TokenType::STATIC));
+        classMember();
     consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
     emit(OpCode::POP);
 
@@ -644,8 +646,15 @@ void Compiler::ifStmt()
 void Compiler::printStmt()
 {
     expression();
-    consume(TokenType::SEMICOLON, "Expect ';' after value.");
+    consume(TokenType::SEMICOLON, "Expect ';' after printed value.");
     emit(OpCode::PRINT);
+}
+
+void Compiler::assertStmt()
+{
+    expression();
+    consume(TokenType::SEMICOLON, "Expect ';' after assertion value");
+    emit(OpCode::ASSERT);
 }
 
 void Compiler::returnStmt()
@@ -1339,6 +1348,110 @@ void Compiler::rangeStmt()
     patchBreaks(loop);
     current->currentLoop = loop.enclosing;
     endScope();
+}
+
+void Compiler::classMember()
+{
+    if(match(TokenType::CLASS))
+    {
+        nestedClassDecl();
+        return;
+    }
+
+    if(match(TokenType::STATIC))
+    {
+        if(match(TokenType::CLASS))
+            nestedClassDecl();
+        else
+            method(true);
+        return;
+    }
+
+    method(false);
+}
+
+void Compiler::nestedClassDecl()
+{
+    consume(TokenType::IDENTIFIER, "Expect nested class name.");
+    Token classname = parser.prev;
+    declareClassMember(classname);
+    u8 name = identConstant(classname);
+
+    addLocal(syntheticToken("@nested_owner"));
+    markInitialized();
+
+    bool hasSuper = false;
+
+    if(match(TokenType::LESS))
+    {
+        superclass(classname);
+        hasSuper = true;
+
+        beginScope();
+        addLocal(syntheticToken("super"));
+        defineVar(0);
+    }
+
+    emit(OpCode::NESTED_CLASS, name);
+    emit(static_cast<u8>(hasSuper));
+
+    ClassCompiler nested;
+    nested.hasSuper = hasSuper;
+    nested.enclosing = currentClass;
+    currentClass = &nested;
+
+    consume(TokenType::LEFT_BRACE, "Expect '{' before nested class body.");
+    while(!check(TokenType::RIGHT_BRACE) && !check(TokenType::TEOF))
+    {
+        classMember();
+    }
+    consume(TokenType::RIGHT_BRACE, "Expect '}' after nested class body.");
+    emit(OpCode::POP);
+    if(hasSuper)
+        endScope();
+
+    // NESTED_CLASS leaves the enclosing class on the stack for the rest of its
+    // body. Remove only the compiler bookkeeping entry; do not emit a pop.
+    --localCount;
+    currentClass = nested.enclosing;
+}
+
+void Compiler::superclass(Token subclassName)
+{
+    consume(TokenType::IDENTIFIER, "Expect superclass name.");
+    Token root = parser.prev;
+    namedVariable(root, false);
+    bool qualified = false;
+
+    while(match(TokenType::DOT))
+    {
+        qualified = true;
+        consume(TokenType::IDENTIFIER, "Expect name after '.' in superclass path.");
+        emit(OpCode::GET_PROPERTY, identConstant(parser.prev));
+    }
+
+    if(!qualified && identifiersEqual(subclassName, root))
+        error("Class cannot inherit from itself.");
+}
+
+void Compiler::declareClassMember(Token& name)
+{
+    if(currentClass == nullptr)
+        return;
+
+    const std::string_view text(
+        name.start,
+        static_cast<size_t>(name.len));
+
+    if(findNativeProperty(ObjType::CLASS, text) != nullptr ||
+        findNativeMethod(ObjType::CLASS, text) != nullptr)
+    {
+        errorAt(name,
+            "Class member name conflicts with a built-in class attribute.");
+    }
+
+    if(!currentClass->declaredMembers.insert(text).second)
+        errorAt(name, "Class already contains a member with this name.");
 }
 
 // -----

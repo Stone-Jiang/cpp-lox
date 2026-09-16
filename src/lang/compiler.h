@@ -4,6 +4,7 @@
 #include "object.h"
 #include "debug.h"
 #include <optional>
+#include <unordered_set>
 
 class Compiler;
 class VM;
@@ -42,7 +43,7 @@ struct ParseRule
     constexpr ParseRule(ParseFn pre, ParseFn in, Prec p) noexcept: prefix(pre), infix(in), prec(p) {}
 };
 
-using Rules = std::array<ParseRule, static_cast<size_t>(TokenType::TEOF) + 1>;
+using Rules = std::array<ParseRule, static_cast<size_t>(TokenType::TEOF) + 1>;  
 
 struct RulesMaker
 {
@@ -77,6 +78,7 @@ class ClassCompiler
 public:
     bool hasSuper = false;
     ClassCompiler* enclosing = nullptr;
+    std::unordered_set<std::string_view> declaredMembers;
 };
 
 class LoopCompiler
@@ -225,6 +227,7 @@ private:
     void forStmt();
     void ifStmt();
     void printStmt();
+    void assertStmt();
     void failStmt();
     void returnStmt();
     void whileStmt();
@@ -278,6 +281,10 @@ private:
 
     void extendStmt();
     void rangeStmt();
-};
 
+    void classMember();
+    void nestedClassDecl();
+    void superclass(Token subclassName);
+    void declareClassMember(Token& name);
+};
 

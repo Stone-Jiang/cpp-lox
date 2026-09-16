@@ -14,4 +14,5 @@ private:
     static int invokeInstruction(const string& name, Chunk& chunk, int offset);
     static int byteInstruction(const string& name, Chunk& chunk, int offset);
     static int jumpInstruction(const string& name, int sign, Chunk& chunk, int offset);
+    static int nestedClassInstruction(Chunk& chunk, int offset);
 };

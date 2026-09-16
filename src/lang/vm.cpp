@@ -89,7 +89,7 @@ bool approxEqual(const Value& left, const Value& right, const ArrayComparison* c
     return true;
 }
 
-size_t saturatingAdd(size_t left, size_t right)
+inline size_t saturatingAdd(size_t left, size_t right)
 {
     const size_t max = std::numeric_limits<size_t>::max();
     return right > max - left ? max : left + right;
@@ -481,12 +481,26 @@ Result VM::run()
             frame = &frames[frameCount-1];
             break;
         }
+
         case OpCode::PRINT:
         {
             printValue(pop());
             printf("\n");
             break;
         }
+
+        case OpCode::ASSERT:
+        {
+            Value val = pop();
+            if(isFalsy(val))
+            {
+                std::string str = to_string(val);
+                runtimeError("Assertion failed at '{}'.", str);
+                return Result::RUNTIME_ERROR;
+            }
+            break;
+        }
+
         case OpCode::DEFINE_GLOBAL:
         {
             ObjString* name = read_str(frame);
@@ -644,8 +658,12 @@ Result VM::run()
             ObjString* name = read_str(frame);
             if(rejectError(receiver, "Can't assign a property on an error value."))
                 return Result::RUNTIME_ERROR;
-            if((is<ObjInstance>(receiver) || is<ObjClass>(receiver)) &&
-                findNativeProperty(objType(receiver), name->str()) != nullptr)
+            const bool reservedNativeAttribute =
+                (is<ObjInstance>(receiver) || is<ObjClass>(receiver)) &&
+                (findNativeProperty(objType(receiver), name->str()) != nullptr ||
+                    (is<ObjClass>(receiver) &&
+                        findNativeMethod(ObjType::CLASS, name->str()) != nullptr));
+            if(reservedNativeAttribute)
             {
                 if(!setNativeProperty(receiver, name))
                     return Result::RUNTIME_ERROR;
@@ -1003,10 +1021,70 @@ Result VM::run()
 
             break;
         }
+        case OpCode::NESTED_CLASS:
+        {
+            auto name = read_str(frame);
+            bool hasSuper = read_byte(frame) != 0;
 
+            ObjClass* outer;
+            ObjClass* superclass = nullptr;
+
+            if(hasSuper)
+            {
+                Value superVal = peek(0);
+
+                if(!is<ObjClass>(superVal))
+                {
+                    runtimeError("Superclass must be a class.");
+                    return Result::RUNTIME_ERROR;
+                }
+                Value outerVal = peek(1);
+                superclass = as<ObjClass>(superVal);
+                outer = as<ObjClass>(outerVal);
+            }
+            else
+            {
+                outer = as<ObjClass>(peek(0));
+            }
+
+            bool innerRooted = false;
+            try
+            {
+                auto inner = makeObj<ObjClass>(*this, name);
+                inner->superclass = superclass;
+                push(Value(inner));
+                innerRooted = true;
+
+                outer->members.set(
+                    name,
+                    ClassMember{Value(inner), true});
+            }
+            catch(const std::bad_alloc&)
+            {
+                if(innerRooted)
+                    pop();
+                runtimeError(
+                    "Not enough memory to define nested class '{}'.",
+                    name->str());
+                return Result::RUNTIME_ERROR;
+            }
+            catch(const std::length_error&)
+            {
+                if(innerRooted)
+                    pop();
+                runtimeError(
+                    "Class '{}' has too many members.",
+                    outer->name->str());
+                return Result::RUNTIME_ERROR;
+            }
+            break;
+        }
+
+        #ifndef RELEASE_UNCHECKED_CASES
         default:
             runtimeError("Unknown opcode {}.", instruction);
             return Result::RUNTIME_ERROR;
+        #endif
         }
     }
 }
@@ -1475,7 +1553,9 @@ bool VM::getInstanceProperty(ObjInstance* instance, ObjString* name)
 
 bool VM::setClassProperty(ObjClass* klass, ObjString* name, Value value)
 {
-    ClassMember member{value, false};
+    // A new member assigned through a class is static. Replacements preserve
+    // the existing or inherited member category below.
+    ClassMember member{value, true};
     if(!klass->members.get(name, member))
     {
         ClassMember inherited;

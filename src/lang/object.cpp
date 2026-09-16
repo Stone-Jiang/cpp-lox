@@ -44,8 +44,6 @@ bool objectsEqual(Obj* left, Obj* right)
     case ObjType::COMPLEX:
         return static_cast<ObjComplex*>(left)->c ==
             static_cast<ObjComplex*>(right)->c;
-    case ObjType::ARRAY:
-        return false; //! Update
     default:
         return false;
     }
@@ -61,8 +59,10 @@ std::string to_string(const Value& value)
         return value.as_bool()? "true": "false";
     else if(value.is_obj())
         return to_string(value.as_obj());
+    #ifndef RELEASE_UNCHECKED_CASES
     else
         return "unknown value"; // unreachable
+    #endif
 }
 
 std::string to_string(const Obj* obj)
@@ -86,11 +86,11 @@ std::string to_string(const Obj* obj)
         return "<cls " + as<ObjClass>(obj)->name->str() + ">";
     case ObjType::ERROR:
     {
-        const auto* error = as<ObjError>(obj);
+        auto error = as<ObjError>(obj);
         return std::format("<err {}: {}>", errorKindName(error->kind), error->message->str());
     }
     case ObjType::INSTANCE:
-        return "<inst of cls " + as<ObjInstance>(obj)->klass->name->str() + ">";
+        return "<ins of cls " + as<ObjInstance>(obj)->klass->name->str() + ">";
     case ObjType::BOUND_METHOD:
         return to_string(as<ObjBoundMethod>(obj)->method->func);
     case ObjType::COMPLEX:
@@ -108,11 +108,16 @@ std::string to_string(const Obj* obj)
         auto f = as<ObjFile>(obj);
         return std::format("<file {} ({}, {})>", f->file.name(), f->file.mode(), f->file.closed()? "c": "o");
     }
+    #ifndef RELEASE_UNCHECKED_CASES
     case ObjType::OBJ:
     case ObjType::NONE:
         return "<obj ?>";
+    default:
+        return "?";
+    #endif
     }
-    return "?";
+    
+    
 }
 
 std::string to_string(const ObjFunction* func)

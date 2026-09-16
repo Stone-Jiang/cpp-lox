@@ -36,8 +36,6 @@ public:
                 break;
             if(line.substr(0,2)=="-q")
                 break;
-            if(line.substr(0,2)=="-r")
-                return process(vm, line.substr(3, line.size()));
             vm.interpret(line);
         }
         return 0;
@@ -71,7 +69,7 @@ int main(int argc, char* argv[])
     int libResult = Runtime::load(vm, argv[0]);
     if(libResult != 0)
     {
-        std::cerr << "[library error] Could not initialize the standard library.\n";
+        std::cerr << "[lib error] Could not initialize the standard library.\n";
         return 78;
     }
 

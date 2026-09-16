@@ -1,6 +1,5 @@
 #include "scanner.h"
 
-
 namespace 
 {
 static const std::unordered_map<string, TokenType> keywords = 
@@ -27,6 +26,7 @@ static const std::unordered_map<string, TokenType> keywords =
     {"continue", TokenType::CONTINUE},
     {"extend", TokenType::EXTEND},
     {"range",  TokenType::RANGE},
+    {"assert", TokenType::ASSERT},
 };
 
 static inline bool isAlpha(char c)
@@ -40,9 +40,10 @@ static inline bool isNumber(char c)
 }
 }
 
-Scanner::Scanner(const string& str)
+Scanner::Scanner(const string& str, bool repl)
 {
     src = str;
+    this->repl = repl;
     start = src.cbegin();
     cur = src.cbegin();
 }
@@ -53,7 +54,7 @@ Token Scanner::scan()
     start = cur;
     tokenLine = line;
     if(isAtEnd())
-        return Token(TokenType::TEOF, nullptr, 0, line);
+        return repl? Token(TokenType::REPL_EOF, nullptr, 0, line): Token(TokenType::TEOF, nullptr, 0, line);
     
     char c = advance();
     if(isAlpha(c))

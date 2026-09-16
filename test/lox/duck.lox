@@ -1,0 +1,23 @@
+class Duck {
+    quack() {
+        print "quack";
+    }
+}
+
+class Person {
+    quack() {
+        print "quack like a duck";
+    }
+}
+
+class Chicken {
+    
+}
+
+fun make_it_quack(obj) {
+    obj.quack();
+}
+
+make_it_quack(Duck());
+make_it_quack(Person());
+make_it_quack(Chicken());
